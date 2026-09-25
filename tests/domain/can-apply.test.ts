@@ -1,0 +1,231 @@
+import { describe, it, expect } from 'vitest'
+import { applyOp, createVault, roomsOnFloor, type Vault } from '../../src/domain/vault'
+import { canApply, validate } from '../../src/domain/validate'
+
+function vaultWith(...rooms: Vault['rooms']): Vault {
+  const v = createVault()
+  v.rooms.push(...rooms)
+  return v
+}
+
+describe('canApply: geometry holds in both modes', () => {
+  for (const mode of ['strict', 'free'] as const) {
+    it(`refuses a room off the edge in ${mode} mode`, () => {
+      const v = vaultWith({ id: 'e', type: 'elevator', floor: 0, x: 9, w: 1 })
+      const verdict = canApply(v, { kind: 'place', type: 'weapon_workshop', floor: 0, x: 24 }, mode)
+      expect(verdict.ok).toBe(false)
+      if (!verdict.ok) expect(verdict.reason).toMatch(/fit/i)
+    })
+
+    it(`refuses an overlap in ${mode} mode`, () => {
+      const v = vaultWith({ id: 'a', type: 'diner', floor: 0, x: 9, w: 3 })
+      const verdict = canApply(v, { kind: 'place', type: 'garden', floor: 0, x: 10 }, mode)
+      expect(verdict.ok).toBe(false)
+      if (!verdict.ok) expect(verdict.blame).toContain('a')
+    })
+
+    it(`places a fourth room beside a full group as its own room, in ${mode} mode`, () => {
+      // In the real game a merged group stops at three: a fourth diner
+      // placed beside one does not refuse, and it does not grow the group
+      // past its cap either -- it stands next to it as a separate room.
+      const v = vaultWith({ id: 'a', type: 'diner', floor: 0, x: 9, w: 9 })
+      const verdict = canApply(v, { kind: 'place', type: 'diner', floor: 0, x: 18 }, mode)
+      expect(verdict.ok).toBe(true)
+
+      const after = applyOp(v, { kind: 'place', type: 'diner', floor: 0, x: 18 })
+      const diners = roomsOnFloor(after, 0)
+        .filter((r) => r.type === 'diner')
+        .sort((p, q) => p.x - q.x)
+      expect(diners).toHaveLength(2)
+      expect(diners[0]).toMatchObject({ x: 9, w: 9 })
+      expect(diners[1]).toMatchObject({ x: 18, w: 3 })
+    })
+
+    it(`refuses touching the vault door in ${mode} mode`, () => {
+      const v = createVault()
+      expect(canApply(v, { kind: 'remove', id: 'door' }, mode).ok).toBe(false)
+      expect(canApply(v, { kind: 'move', id: 'door', floor: 1, x: 0 }, mode).ok).toBe(false)
+    })
+  }
+})
+
+describe('canApply: connectivity is strict only', () => {
+  it('refuses a room with no route in strict mode', () => {
+    const v = createVault()
+    const verdict = canApply(v, { kind: 'place', type: 'diner', floor: 0, x: 12 }, 'strict')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toMatch(/route|reach/i)
+  })
+
+  it('allows the same room in free mode', () => {
+    const v = createVault()
+    expect(canApply(v, { kind: 'place', type: 'diner', floor: 0, x: 12 }, 'free').ok).toBe(true)
+  })
+
+  it('allows a room that touches the door', () => {
+    const v = createVault()
+    expect(canApply(v, { kind: 'place', type: 'elevator', floor: 0, x: 9 }, 'strict').ok).toBe(true)
+  })
+
+  it('only digs down where an elevator already is', () => {
+    const v = vaultWith({ id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 })
+    expect(canApply(v, { kind: 'place', type: 'elevator', floor: 1, x: 9 }, 'strict').ok).toBe(true)
+    expect(canApply(v, { kind: 'place', type: 'elevator', floor: 1, x: 12 }, 'strict').ok).toBe(false)
+  })
+
+  it('refuses a deletion that would strand rooms, and names them', () => {
+    const v = vaultWith(
+      { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+      { id: 'e1', type: 'elevator', floor: 1, x: 9, w: 1 },
+      { id: 'd1', type: 'diner', floor: 1, x: 10, w: 3 },
+    )
+    const verdict = canApply(v, { kind: 'remove', id: 'e0' }, 'strict')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) {
+      expect(verdict.blame.sort()).toEqual(['d1', 'e1'])
+      expect(verdict.reason).toMatch(/2 rooms/)
+    }
+  })
+
+  it('allows the same deletion in free mode', () => {
+    const v = vaultWith(
+      { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+      { id: 'e1', type: 'elevator', floor: 1, x: 9, w: 1 },
+    )
+    expect(canApply(v, { kind: 'remove', id: 'e0' }, 'free').ok).toBe(true)
+  })
+
+  it('allows removing everything that depends on a room at once', () => {
+    const v = vaultWith(
+      { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+      { id: 'e1', type: 'elevator', floor: 1, x: 9, w: 1 },
+      { id: 'd1', type: 'diner', floor: 1, x: 10, w: 3 },
+    )
+    expect(canApply(v, { kind: 'removeMany', ids: ['e0', 'e1', 'd1'] }, 'strict').ok).toBe(true)
+  })
+
+  it('reports the generic refusal singular for exactly one stranded room', () => {
+    const v = vaultWith(
+      { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+      { id: 'e1', type: 'elevator', floor: 1, x: 9, w: 1 },
+      { id: 'd1', type: 'diner', floor: 1, x: 10, w: 3 },
+    )
+    const verdict = canApply(v, { kind: 'move', id: 'd1', floor: 1, x: 20 }, 'strict')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) {
+      expect(verdict.reason).toBe('That would leave 1 room with no route to the vault door.')
+    }
+  })
+})
+
+describe('canApply: strict mode over an already broken vault', () => {
+  const broken = (): Vault => vaultWith(
+    { id: 'lost', type: 'diner', floor: 3, x: 12, w: 3 },
+  )
+
+  it('lets you tidy a vault it would never have let you build', () => {
+    expect(validate(broken()).some((p) => p.kind === 'unreachable')).toBe(true)
+    expect(canApply(broken(), { kind: 'remove', id: 'lost' }, 'strict').ok).toBe(true)
+  })
+
+  it('still refuses to make it worse', () => {
+    const v = broken()
+    expect(canApply(v, { kind: 'place', type: 'garden', floor: 5, x: 0 }, 'strict').ok).toBe(false)
+  })
+
+  it('allows a move that leaves the count of stranded rooms alone', () => {
+    const v = broken()
+    expect(canApply(v, { kind: 'move', id: 'lost', floor: 3, x: 15 }, 'strict').ok).toBe(true)
+  })
+
+  it('lets you split an unreachable merged room without the id churn looking like new stranding', () => {
+    // 'lost' merges to width 9 (three diners' worth) while already
+    // disconnected; 'e0'/'d0' sit properly connected off the vault door.
+    // splitRoom mints fresh ids for two of 'lost's three pieces -- naively
+    // comparing stranded-id sets before and after would see those fresh ids
+    // and refuse, even though a split cannot change reachability. The real
+    // invariant isn't "the same number of stranded room records" (splitting
+    // one record into three necessarily makes three), it's that nothing
+    // that was actually connected becomes stranded by this.
+    const v = vaultWith(
+      { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+      { id: 'd0', type: 'diner', floor: 0, x: 10, w: 3 },
+      { id: 'lost', type: 'diner', floor: 3, x: 12, w: 9 },
+    )
+    const verdict = canApply(v, { kind: 'split', id: 'lost' }, 'strict')
+    expect(verdict.ok).toBe(true)
+
+    const after = applyOp(v, { kind: 'split', id: 'lost' })
+    const lostDiners = after.rooms.filter((r) => r.floor === 3)
+    expect(lostDiners).toHaveLength(3)
+    expect(lostDiners.every((r) => r.w === 3)).toBe(true)
+
+    // Every piece of the split is still unreachable, as it should be --
+    // splitting a broken room does not repair it -- and the previously
+    // connected rooms are still not among the stranded.
+    const stranded = new Set(validate(after).filter((p) => p.kind === 'unreachable').flatMap((p) => p.rooms))
+    for (const r of lostDiners) expect(stranded.has(r.id)).toBe(true)
+    expect(stranded.has('e0')).toBe(false)
+    expect(stranded.has('d0')).toBe(false)
+  })
+})
+
+describe('canApply: the merge cap', () => {
+  it('drops a room between two full groups next to both, welding neither', () => {
+    // Two already-full triples (width 9 each) with a three-cell gap between
+    // them. A room placed in the gap touches both, but joining either one
+    // would push it past its cap (9 + 3 = 12 > 9), so mergeNeighbours (once
+    // the cap is restored) leaves all three as separate, adjacent records
+    // instead of welding two nine-wide groups into one twelve-wide one.
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 1, x: 0, w: 9 },
+      { id: 'b', type: 'diner', floor: 1, x: 12, w: 9 },
+    )
+    const verdict = canApply(v, { kind: 'place', type: 'diner', floor: 1, x: 9 }, 'free')
+    expect(verdict.ok).toBe(true)
+
+    const after = applyOp(v, { kind: 'place', type: 'diner', floor: 1, x: 9 })
+    const diners = roomsOnFloor(after, 1)
+      .filter((r) => r.type === 'diner')
+      .sort((p, q) => p.x - q.x)
+    expect(diners).toHaveLength(3)
+    expect(diners.map((r) => ({ x: r.x, w: r.w }))).toEqual([
+      { x: 0, w: 9 },
+      { x: 9, w: 3 },
+      { x: 12, w: 9 },
+    ])
+  })
+})
+
+describe('canApply: refusal edge cases', () => {
+  it('refuses a removeMany that includes the vault door among other ids', () => {
+    const v = vaultWith({ id: 'a', type: 'diner', floor: 0, x: 9, w: 3 })
+    expect(canApply(v, { kind: 'removeMany', ids: ['a', 'door'] }, 'strict').ok).toBe(false)
+  })
+
+  it('refuses an op naming a room the vault does not have', () => {
+    const v = createVault()
+    const verdict = canApply(v, { kind: 'remove', id: 'ghost' }, 'strict')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toMatch(/no room/i)
+  })
+
+  it('lands a move beside a full group instead of over-merging past the limit', () => {
+    // 'a' is already a full triple (width 9). Moving 'b' to touch it used to
+    // merge into one width-12 record, which the bad-width rule then refused
+    // -- but that was refusing a placement the game allows. With the cap
+    // restored, 'b' simply does not join 'a' and the move succeeds.
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 0, x: 10, w: 9 },
+      { id: 'b', type: 'diner', floor: 0, x: 22, w: 3 },
+    )
+    const verdict = canApply(v, { kind: 'move', id: 'b', floor: 0, x: 19 }, 'free')
+    expect(verdict.ok).toBe(true)
+
+    const after = applyOp(v, { kind: 'move', id: 'b', floor: 0, x: 19 })
+    const diners = after.rooms.filter((r) => r.type === 'diner').sort((p, q) => p.x - q.x)
+    expect(diners).toHaveLength(2)
+    expect(diners[0]).toMatchObject({ x: 10, w: 9 })
+    expect(diners[1]).toMatchObject({ x: 19, w: 3 })
+  })
+})

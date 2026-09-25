@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+test-results
+playwright-report
+
+# Working notes, not part of the published project: design specs, the
+# implementation plan, and the per-task reports and review diffs the
+# agent workflow leaves behind. They stay on disk and out of the repo.
+docs/superpowers/
+.superpowers/

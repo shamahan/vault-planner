@@ -1,0 +1,10 @@
+# Normalise every text file to LF in the repository and in the working tree.
+# Without this, core.autocrlf checks snapshots out with CRLF on Windows while
+# vitest writes them with LF, so a fresh Windows clone fails snapshot tests
+# that pass on the Linux CI runner.
+* text=auto eol=lf
+
+# Binary files git must not touch.
+*.png binary
+*.ico binary
+*.woff2 binary

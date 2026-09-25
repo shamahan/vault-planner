@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Vault Planner — a layout planner for Fallout Shelter</title>
+    <meta
+      name="description"
+      content="Plan a Fallout Shelter vault before you dig it. Lay rooms out on the 26-cell grid across 25 floors, see what the game would refuse to build, and keep the result as a file or a link. Free, no account."
+    />
+    <link rel="canonical" href="https://vault.shamahan.com/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vault Planner" />
+    <meta property="og:url" content="https://vault.shamahan.com/" />
+    <meta property="og:title" content="Vault Planner — a layout planner for Fallout Shelter" />
+    <meta
+      property="og:description"
+      content="Lay rooms out on the 26-cell grid across 25 floors and see what the game would refuse to build. Free, no account, nothing uploaded."
+    />
+    <!--
+      Absolute, because a crawler fetching this card is not browsing the
+      site and has no base to resolve a relative path against. og.png is
+      generated from tools/og-image.html by `node tools/make-og.mjs` and
+      committed, since site/ is copied to the deploy verbatim and has no
+      build step to make it. The dimensions are declared so a platform can
+      lay the card out before the image arrives; tests/site/landing.test.ts
+      reads them back out of the PNG itself, so they cannot drift.
+    -->
+    <meta property="og:image" content="https://vault.shamahan.com/og.png" />
+    <meta property="og:image:width" content="2400" />
+    <meta property="og:image:height" content="1260" />
+    <meta
+      property="og:image:alt"
+      content="Six floors of a Fallout Shelter vault laid out on the planner's grid, beside the words: plan the vault before you dig."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://vault.shamahan.com/og.png" />
+
+    <!--
+      The only reason this page exists is to give a crawler something to read:
+      the editor at /planner is an empty div until its script runs. So every
+      word below is in the markup, in heading order, and nothing here needs
+      JavaScript to render. The analytics tag at the end of <body> is the one
+      script on the page, and the page is complete without it.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Vault Planner",
+        "url": "https://vault.shamahan.com/planner/",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any web browser",
+        "description": "An unofficial layout planner for Fallout Shelter. Lay rooms out on the vault grid, see what the game would not let you build, and keep the result as a JSON file or a share link.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Oleksandr Kalinkin" }
+      }
+    </script>
+
+    <style>
+      /* The two typefaces are served from this domain, not from Google.
+         Hotlinking them sent every visitor's IP to a third party before the
+         page had drawn anything, on a page that says nothing here counts
+         you -- which was true of the counter and not true of the fonts.
+
+         It is no slower. A visitor used to pay a DNS lookup and a TLS
+         handshake to fonts.googleapis.com, wait for a stylesheet that
+         blocks rendering, then do the same again for fonts.gstatic.com
+         before a single glyph could start downloading. Now the files come
+         from the connection that is already open, and these @font-face
+         rules are already parsed by the time this style block ends.
+
+         One variable file each, latin subset, instead of the six static
+         weights the old link asked for. Variable because the page uses
+         400, 500, 600 and 700 and one axis covers them all; latin because
+         the only characters here outside ASCII are an em dash, an en dash
+         and a middot, all of which the latin subset carries. Anything else
+         falls back to the system font, the way it always did for the
+         subsets Google was not sending either.
+
+         Descriptors are Google's own, copied verbatim from the stylesheet
+         these files came from -- the weight ranges in particular are
+         properties of the files, not preferences. No unicode-range: there
+         is only one subset, so there is nothing to choose between.
+
+         Both are under the SIL Open Font License; the licences ship beside
+         the files, in fonts/, which is what that licence asks for. */
+      @font-face {
+        font-family: 'Archivo';
+        font-style: normal;
+        font-weight: 100 900;
+        font-stretch: 100%;
+        font-display: swap;
+        src: url(/fonts/archivo-latin-variable.woff2) format('woff2');
+      }
+      @font-face {
+        font-family: 'JetBrains Mono';
+        font-style: normal;
+        font-weight: 100 800;
+        font-display: swap;
+        src: url(/fonts/jetbrains-mono-latin-variable.woff2) format('woff2');
+      }
+
+      /* Every colour here is one of src/render/theme.ts's, by value. The
+         landing and the editor are one site, and a visitor crossing from
+         this page into /planner should not notice a seam. */
+      :root {
+        color-scheme: dark;
+        --ground: #0e1412;
+        --floor: #0f1613;
+        --panel: #131a17;
+        --raised: #182220;
+        --line: #1c2622;
+        --edge: #253029;
+        --text: #dce5e0;
+        --bright: #f1f6f3;
+        --body: #b9c6c0;
+        --dim: #8b9a94;
+        --accent: #e3a63c;
+
+        --sans: Archivo, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+        /* The page gutter, and with it the width of every section's content.
+           One variable so the header, the sections and the footer cannot
+           drift apart at a breakpoint. */
+        --gutter: 96px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--text);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a { color: var(--accent); }
+
+      .wrap {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding-inline: var(--gutter);
+      }
+
+      /* Header ------------------------------------------------------- */
+
+      .masthead {
+        border-bottom: 1px solid var(--line);
+      }
+      .masthead .wrap {
+        height: 72px;
+        display: flex;
+        align-items: center;
+        gap: 28px;
+      }
+      .wordmark {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        color: var(--dim);
+      }
+      .masthead nav {
+        margin-left: auto;
+        display: flex;
+        gap: 28px;
+      }
+      .masthead nav a {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        color: var(--dim);
+        text-decoration: none;
+      }
+      .masthead nav a:hover { color: var(--text); }
+
+      /* Hero --------------------------------------------------------- */
+
+      .hero { padding-block: 88px 64px; }
+      .eyebrow {
+        margin: 0 0 22px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.24em;
+        color: var(--accent);
+      }
+      h1 {
+        margin: 0;
+        max-width: 15ch;
+        font-size: clamp(42px, 6vw, 76px);
+        font-weight: 700;
+        line-height: 0.99;
+        letter-spacing: -0.025em;
+        color: var(--bright);
+      }
+      .lede {
+        margin: 28px 0 0;
+        max-width: 62ch;
+        font-size: 18px;
+        line-height: 1.6;
+        color: var(--body);
+      }
+      .lede strong { color: var(--text); font-weight: 600; }
+
+      .cta-row {
+        margin-top: 36px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+      }
+      .cta,
+      .cta-quiet {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        min-height: 52px;
+        padding-inline: 28px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .cta { background: var(--accent); color: var(--ground); }
+      .cta:hover { background: #f2be5f; }
+      .cta-quiet {
+        padding-inline: 22px;
+        color: var(--text);
+        border: 1px solid #2b3831;
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .cta-quiet:hover { border-color: #3d4d45; }
+      .fineprint {
+        margin: 22px 0 0;
+        max-width: 68ch;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--dim);
+      }
+
+      /* The editor, shown as itself ---------------------------------- */
+
+      .shot {
+        border: 1px solid #26332d;
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--ground);
+      }
+      .shot-bar {
+        height: 56px;
+        padding-inline: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #151c19;
+        border-bottom: 1px solid #26332d;
+      }
+      .shot-bar .brand {
+        font-family: ui-monospace, monospace;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        color: #86968f;
+      }
+      .shot-bar .act { padding: 7px 11px; font-size: 13px; color: #c3d0ca; }
+      .shot-bar .act.off { color: #56645e; }
+      .shot-bar .grow { flex: 1; }
+      .shot-bar .mode { font-size: 13px; color: var(--dim); }
+      .shot-bar .mode strong { color: var(--text); font-weight: 600; }
+      .shot-bar .knob {
+        position: relative;
+        flex: none;
+        width: 38px;
+        height: 21px;
+        border-radius: 999px;
+        background: var(--accent);
+      }
+      .shot-bar .knob::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 20px;
+        width: 15px;
+        height: 15px;
+        border-radius: 999px;
+        background: var(--ground);
+      }
+      .shot-body { display: flex; }
+
+      .shot-palette {
+        width: 268px;
+        flex: none;
+        height: 476px;
+        overflow: hidden;
+        background: var(--panel);
+        border-right: 1px solid #26332d;
+      }
+      .shot-palette h3 {
+        margin: 14px 16px 8px;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        font-weight: 400;
+        letter-spacing: 0.14em;
+        color: #86968f;
+      }
+      .shot-palette .group {
+        margin: 12px 0 6px 16px;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+      }
+      .shot-room {
+        margin: 0 12px 6px;
+        padding: 8px 10px;
+        background: var(--raised);
+        border: 1px solid var(--edge);
+        border-radius: 7px;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        column-gap: 10px;
+        row-gap: 2px;
+        align-items: center;
+      }
+      .shot-room.armed {
+        background: rgba(227, 166, 60, 0.14);
+        border-color: var(--accent);
+      }
+      .shot-room svg { grid-row: 1 / span 2; }
+      .shot-room .name { grid-column: 2 / span 2; font-size: 13px; }
+      .shot-room .hint,
+      .shot-room .w {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        color: #6c7b75;
+      }
+      .shot-room .hint { grid-column: 2; }
+      .shot-room .w { grid-column: 3; justify-self: end; }
+
+      /* The scene is drawn at the size it really is. Wider than a phone,
+         so the pane scrolls sideways -- which is what the editor's own
+         canvas does. `margin: 0 auto` centres it while it fits and pins it
+         to the left edge once it does not, so the vault door is never
+         stranded off-screen the way `justify-content: center` leaves it. */
+      .shot-canvas {
+        flex: 1;
+        min-width: 0;
+        overflow-x: auto;
+        background: var(--ground);
+      }
+      .shot-canvas svg { display: block; margin: 0 auto; }
+
+      .caption {
+        margin: 18px 0 0;
+        font-family: var(--mono);
+        font-size: 11px;
+        line-height: 1.7;
+        color: var(--dim);
+      }
+
+      /* Sections ----------------------------------------------------- */
+
+      section { padding-bottom: 96px; }
+
+      .kicker {
+        margin: 0 0 32px;
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0.2em;
+        color: var(--dim);
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: clamp(30px, 3.4vw, 40px);
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        color: var(--bright);
+      }
+      .intro {
+        margin: 0 0 32px;
+        max-width: 62ch;
+        font-size: 17px;
+        line-height: 1.65;
+        color: var(--body);
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px;
+      }
+      .card {
+        padding: 28px;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 10px;
+      }
+      .card h3 {
+        margin: 0 0 14px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--bright);
+      }
+      .card p { margin: 0; font-size: 15px; line-height: 1.65; color: var(--body); }
+
+      .checks {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px 48px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .checks li {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--line);
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--body);
+      }
+      .checks li::before {
+        content: "";
+        flex: none;
+        margin-top: 8px;
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        background: var(--accent);
+      }
+      .checks strong { color: var(--text); font-weight: 600; }
+
+      .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 16px;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 7px;
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+      }
+      .chip::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        background: currentColor;
+      }
+
+      .two-up {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 64px;
+      }
+      .prose p {
+        margin: 0 0 18px;
+        font-size: 16px;
+        line-height: 1.7;
+        color: var(--body);
+      }
+      .prose p:last-child { margin-bottom: 0; }
+
+      .faq h2 { margin-bottom: 24px; }
+      .faq dt {
+        margin: 0 0 8px;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--bright);
+      }
+      .faq dd {
+        margin: 0 0 18px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--line);
+        font-size: 15px;
+        line-height: 1.65;
+        color: var(--body);
+      }
+      .faq dd:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+
+      /* Footer ------------------------------------------------------- */
+
+      footer { border-top: 1px solid var(--line); }
+      footer .wrap {
+        padding-block: 36px 44px;
+        display: flex;
+        align-items: flex-start;
+        gap: 48px;
+      }
+      footer .small {
+        margin: 0;
+        max-width: 72ch;
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--dim);
+      }
+      footer .small + .small { margin-top: 12px; }
+      footer .wordmark { display: block; margin-bottom: 10px; }
+
+      /* Narrow ------------------------------------------------------- */
+
+      @media (max-width: 1000px) {
+        :root { --gutter: 32px; }
+        .cards { grid-template-columns: 1fr; }
+        .checks { grid-template-columns: 1fr; }
+        .two-up { grid-template-columns: 1fr; gap: 48px; }
+        /* The palette is the one part of the editor that says nothing a
+           phone screen has room for. The scene is the point; it stays. */
+        .shot-palette { display: none; }
+        /* The toolbar does not scroll, it clips -- and a clipped row of
+           labels ends mid-word ("Export PN"), which reads as a broken page
+           rather than as an interface continuing off-screen. The brand and
+           the mode switch alone say what the strip is for, and they fit. */
+        .shot-bar .act { display: none; }
+      }
+
+      @media (max-width: 640px) {
+        :root { --gutter: 20px; }
+        .hero { padding-block: 48px 40px; }
+        section { padding-bottom: 56px; }
+        .masthead .wrap { height: 60px; gap: 16px; }
+        .cta,
+        .cta-quiet { width: 100%; }
+        footer .wrap { flex-direction: column; gap: 24px; }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        html { scroll-behavior: smooth; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="masthead">
+      <div class="wrap">
+        <span class="wordmark">VAULT PLANNER</span>
+        <nav>
+          <a href="#checks">WHAT IT CHECKS</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero wrap">
+        <p class="eyebrow">UNOFFICIAL &middot; RUNS IN THE BROWSER &middot; NO ACCOUNT</p>
+        <h1>Plan the vault before you dig.</h1>
+        <p class="lede">
+          A layout planner for <strong>Fallout Shelter</strong>. Lay rooms out on the
+          26-cell grid across all 25 floors and see at once what the game itself
+          would not let you build &mdash; a floor with no elevator reaching it, a room
+          whose removal would cut the rest off from the vault door, a merge that does
+          not line up.
+        </p>
+        <div class="cta-row">
+          <a class="cta" href="/planner/">
+            Open the planner
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5" /></svg>
+          </a>
+          <a class="cta-quiet" href="#checks">See what it checks</a>
+        </div>
+        <p class="fineprint">
+          No account, nothing to sign up for. Your vault never leaves your browser
+          &mdash; it lives in a JSON file and in the link you share.
+        </p>
+      </section>
+
+      <section class="wrap">
+        <div class="shot">
+          <!-- The strip and the panel below reproduce renderToolbar and
+               renderPalette from src/app/panels.ts. They are markup, not
+               controls: nothing here is a <button>, because none of it does
+               anything. The real ones are at /planner. -->
+          <div class="shot-bar" aria-hidden="true">
+            <span class="brand">VAULT PLANNER</span>
+            <span class="act">New</span>
+            <span class="act">Open</span>
+            <span class="act">Save</span>
+            <span class="act">Copy link</span>
+            <span class="act">Export PNG</span>
+            <span class="grow"></span>
+            <span class="act">Undo</span>
+            <span class="act off">Redo</span>
+            <span class="mode">Game rules: <strong>Strict</strong></span>
+            <span class="knob"></span>
+          </div>
+
+          <div class="shot-body">
+            <div class="shot-palette" aria-hidden="true">
+              <h3>Rooms</h3>
+
+              <div class="group" style="color: #fdc990">INFRA</div>
+              <div class="shot-room">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 3v18M12 3l-4 5M12 3l4 5M12 21l-4-5M12 21l4-5" fill="none" stroke="#fdc990" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span class="name">Elevator</span>
+                <span class="hint"></span>
+                <span class="w">1</span>
+              </div>
+
+              <div class="group" style="color: #e3a63c">POWER</div>
+              <div class="shot-room armed">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path d="M13 2L5 14h6l-2 8 8-12h-6l2-8z" fill="none" stroke="#e3a63c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span class="name">Power Generator</span>
+                <span class="hint">S</span>
+                <span class="w">3</span>
+              </div>
+              <div class="shot-room">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 9.5a2.5 2.5 0 110 5 2.5 2.5 0 110-5M12 3a9 9 0 019 9M12 21a9 9 0 01-9-9M19.8 16.5A9 9 0 017.5 19.8M4.2 7.5A9 9 0 0116.5 4.2" fill="none" stroke="#e3a63c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span class="name">Nuclear Reactor</span>
+                <span class="hint">S &middot; 60 dwellers</span>
+                <span class="w">3</span>
+              </div>
+
+              <div class="group" style="color: #d7603a">FOOD</div>
+              <div class="shot-room">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path d="M6 3v7a2 2 0 004 0V3M8 12v9M16.5 3c-1.4 1.2-2 3-2 5 0 1.8.9 3 2 3s2-1.2 2-3c0-2-.6-3.8-2-5zM16.5 11v10" fill="none" stroke="#d7603a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span class="name">Diner</span>
+                <span class="hint">A</span>
+                <span class="w">3</span>
+              </div>
+              <div class="shot-room">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 21V9M12 9C9.5 9 6 7.5 6 4c3.5 0 6 2 6 5zM12 11c2.5 0 6-1.5 6-5-3.5 0-6 2-6 5z" fill="none" stroke="#d7603a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span class="name">Garden</span>
+                <span class="hint">A &middot; 70 dwellers</span>
+                <span class="w">3</span>
+              </div>
+
+              <div class="group" style="color: #60b2cb">WATER</div>
+              <div class="shot-room">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 3c4.2 5.2 6 7.8 6 10.2A6 6 0 116 13.2C6 10.8 7.8 8.2 12 3z" fill="none" stroke="#60b2cb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span class="name">Water Treatment</span>
+                <span class="hint">P</span>
+                <span class="w">3</span>
+              </div>
+              <div class="shot-room">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 3c4.2 5.2 6 7.8 6 10.2A6 6 0 116 13.2C6 10.8 7.8 8.2 12 3zM8.5 14h7M9.5 17h5" fill="none" stroke="#60b2cb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span class="name">Water Purification</span>
+                <span class="hint">P &middot; 80 dwellers</span>
+                <span class="w">3</span>
+              </div>
+            </div>
+
+            <!-- The scene below is src/render/scene.ts's output, by hand and
+                 to the unit: cell 22, floor 56 with a 4 gap, a room w*22-2 by
+                 FLOOR_PX-6 at rx 3, filled tint(colour, .13) under a stroke of
+                 the colour itself, glyph paths copied from src/render/icons.ts,
+                 and each room's real name at 9px in its own colour. It is a
+                 picture of the editor, so it is one <img role> to a reader and
+                 silent to the rest. -->
+            <div class="shot-canvas">
+              <svg width="634" height="476" viewBox="0 0 634 476" role="img" aria-label="Seven floors of a vault: the vault door and an elevator on floor one, then living, training, storage, power, crafting and medical rooms hung off two elevator shafts." style="font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+                <defs>
+                  <symbol id="glyph-vault_door" viewBox="0 0 24 24"><path d="M4 20V6a8 8 0 0116 0v14M12 8a4 4 0 110 8 4 4 0 110-8M12 4v4M12 16v4M8 12H4M20 12h-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-elevator" viewBox="0 0 24 24"><path d="M12 3v18M12 3l-4 5M12 3l4 5M12 21l-4-5M12 21l4-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-bolt" viewBox="0 0 24 24"><path d="M13 2L5 14h6l-2 8 8-12h-6l2-8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-reactor" viewBox="0 0 24 24"><path d="M12 9.5a2.5 2.5 0 110 5 2.5 2.5 0 110-5M12 3a9 9 0 019 9M12 21a9 9 0 01-9-9M19.8 16.5A9 9 0 017.5 19.8M4.2 7.5A9 9 0 0116.5 4.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-cutlery" viewBox="0 0 24 24"><path d="M6 3v7a2 2 0 004 0V3M8 12v9M16.5 3c-1.4 1.2-2 3-2 5 0 1.8.9 3 2 3s2-1.2 2-3c0-2-.6-3.8-2-5zM16.5 11v10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-sprout" viewBox="0 0 24 24"><path d="M12 21V9M12 9C9.5 9 6 7.5 6 4c3.5 0 6 2 6 5zM12 11c2.5 0 6-1.5 6-5-3.5 0-6 2-6 5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-drop" viewBox="0 0 24 24"><path d="M12 3c4.2 5.2 6 7.8 6 10.2A6 6 0 116 13.2C6 10.8 7.8 8.2 12 3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-bed" viewBox="0 0 24 24"><path d="M3 19v-8M3 15h18v4M21 19v-4M6.5 12.5a2 2 0 104 0 2 2 0 10-4 0M11.5 12.5H21" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-crate" viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4V8zM4 8l8 4 8-4M12 12v8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-cross" viewBox="0 0 24 24"><path d="M10 3h4v6h6v4h-6v6h-4v-6H4V9h6V3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-flask" viewBox="0 0 24 24"><path d="M9.5 3v6.5L4.5 18a2 2 0 001.8 3h11.4a2 2 0 001.8-3l-5-8.5V3M8 3h8M7.5 14h9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-barbell" viewBox="0 0 24 24"><path d="M3 9v6M6 6.5v11M18 6.5v11M21 9v6M6 12h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-runner" viewBox="0 0 24 24"><path d="M13.5 4a1.6 1.6 0 110 .01M11 21l1.6-5.6L9 13l1-5 3.5 2 3 1M6 9.5l3-1M14.6 15l3 2 .9 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h5v17H6a2 2 0 00-2 2V5zM20 5a2 2 0 00-2-2h-5v17h5a2 2 0 012 2V5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-cup" viewBox="0 0 24 24"><path d="M5 8h11v6.5A4.5 4.5 0 0111.5 19h-2A4.5 4.5 0 015 14.5V8zM16 9.5h1.8a2.2 2.2 0 010 4.4H16M4 21h14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-hammer" viewBox="0 0 24 24"><path d="M14.5 3.5l6 6-2.5 2.5-6-6 2.5-2.5zM11 8L4 15v5h5l7-7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-desk" viewBox="0 0 24 24"><path d="M4 18h16M6 18v-7h12v7M9 11V7h6v4M12 13v2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                  <symbol id="glyph-broadcast" viewBox="0 0 24 24"><path d="M12 10a2 2 0 110 4 2 2 0 110-4M8.5 8.5a5 5 0 000 7M15.5 8.5a5 5 0 010 7M5.5 5.5a9 9 0 000 13M18.5 5.5a9 9 0 010 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+                </defs>
+
+                <rect width="634" height="476" fill="#0e1412" />
+
+                <text x="24" y="60" text-anchor="end" font-size="11" fill="#5d6c66">1</text>
+                <rect x="34" y="28" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+                <g transform="translate(35 31)"><rect width="196" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-vault_door" x="89.5" y="10.5" width="17" height="17" color="#fdc990" /><text x="98" y="39" text-anchor="middle" font-size="9" fill="#fdc990">Vault Door</text></g>
+                <g transform="translate(233 31)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+                <g transform="translate(255 31)"><rect width="64" height="50" rx="3" fill="rgba(227,166,60,0.13)" stroke="#e3a63c" stroke-width="1" /><use href="#glyph-bolt" x="23.5" y="10.5" width="17" height="17" color="#e3a63c" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#e3a63c">Power Generator</text></g>
+                <g transform="translate(321 31)"><rect width="64" height="50" rx="3" fill="rgba(215,96,58,0.13)" stroke="#d7603a" stroke-width="1" /><use href="#glyph-cutlery" x="23.5" y="10.5" width="17" height="17" color="#d7603a" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#d7603a">Diner</text></g>
+                <g transform="translate(387 31)"><rect width="64" height="50" rx="3" fill="rgba(96,178,203,0.13)" stroke="#60b2cb" stroke-width="1" /><use href="#glyph-drop" x="23.5" y="10.5" width="17" height="17" color="#60b2cb" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#60b2cb">Water Treatment</text></g>
+
+                <text x="24" y="120" text-anchor="end" font-size="11" fill="#5d6c66">2</text>
+                <rect x="34" y="88" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+                <g transform="translate(233 91)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+                <g transform="translate(255 91)"><rect width="196" height="50" rx="3" fill="rgba(74,185,113,0.13)" stroke="#4ab971" stroke-width="1" /><use href="#glyph-bed" x="89.5" y="10.5" width="17" height="17" color="#4ab971" /><text x="98" y="39" text-anchor="middle" font-size="9" fill="#4ab971">Living Room</text></g>
+                <g transform="translate(453 91)"><rect width="64" height="50" rx="3" fill="rgba(180,123,218,0.13)" stroke="#b47bda" stroke-width="1" /><use href="#glyph-cross" x="23.5" y="10.5" width="17" height="17" color="#b47bda" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#b47bda">Medbay</text></g>
+
+                <text x="24" y="180" text-anchor="end" font-size="11" fill="#5d6c66">3</text>
+                <rect x="34" y="148" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+                <g transform="translate(233 151)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+                <g transform="translate(255 151)"><rect width="64" height="50" rx="3" fill="rgba(123,142,212,0.13)" stroke="#7b8ed4" stroke-width="1" /><use href="#glyph-barbell" x="23.5" y="10.5" width="17" height="17" color="#7b8ed4" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#7b8ed4">Weight Room</text></g>
+                <g transform="translate(321 151)"><rect width="64" height="50" rx="3" fill="rgba(123,142,212,0.13)" stroke="#7b8ed4" stroke-width="1" /><use href="#glyph-book" x="23.5" y="10.5" width="17" height="17" color="#7b8ed4" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#7b8ed4">Classroom</text></g>
+                <g transform="translate(387 151)"><rect width="64" height="50" rx="3" fill="rgba(182,124,71,0.13)" stroke="#b67c47" stroke-width="1" /><use href="#glyph-crate" x="23.5" y="10.5" width="17" height="17" color="#b67c47" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#b67c47">Storage Room</text></g>
+                <g transform="translate(453 151)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+
+                <text x="24" y="240" text-anchor="end" font-size="11" fill="#5d6c66">4</text>
+                <rect x="34" y="208" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+                <g transform="translate(233 211)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+                <g transform="translate(255 211)"><rect width="64" height="50" rx="3" fill="rgba(215,96,58,0.13)" stroke="#d7603a" stroke-width="1" /><rect width="64" height="50" rx="3" fill="none" stroke="#e3a63c" stroke-width="2" /><circle cx="54" cy="10" r="7.5" fill="#0e1412" stroke="#e3a63c" stroke-width="1.5" /><path d="M50.8 6.8L57.2 13.2M57.2 6.8L50.8 13.2" stroke="#e3a63c" stroke-width="1.5" stroke-linecap="round" /><use href="#glyph-sprout" x="23.5" y="10.5" width="17" height="17" color="#d7603a" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#d7603a">Garden</text></g>
+                <g transform="translate(321 211)"><rect width="64" height="50" rx="3" fill="rgba(227,166,60,0.13)" stroke="#e3a63c" stroke-width="1" /><use href="#glyph-reactor" x="23.5" y="10.5" width="17" height="17" color="#e3a63c" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#e3a63c">Nuclear Reactor</text></g>
+                <g transform="translate(453 211)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+
+                <text x="24" y="300" text-anchor="end" font-size="11" fill="#5d6c66">5</text>
+                <rect x="34" y="268" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+                <g transform="translate(233 271)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+                <g transform="translate(255 271)"><rect width="196" height="50" rx="3" fill="rgba(210,116,145,0.13)" stroke="#d27491" stroke-width="1" /><use href="#glyph-hammer" x="89.5" y="10.5" width="17" height="17" color="#d27491" /><text x="98" y="39" text-anchor="middle" font-size="9" fill="#d27491">Weapon Workshop</text></g>
+                <g transform="translate(453 271)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+
+                <text x="24" y="360" text-anchor="end" font-size="11" fill="#5d6c66">6</text>
+                <rect x="34" y="328" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+                <g transform="translate(233 331)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+                <g transform="translate(255 331)"><rect width="130" height="50" rx="3" fill="rgba(143,164,124,0.13)" stroke="#8fa47c" stroke-width="1" /><use href="#glyph-desk" x="56.5" y="10.5" width="17" height="17" color="#8fa47c" /><text x="65" y="39" text-anchor="middle" font-size="9" fill="#8fa47c">Overseer&#39;s Office</text></g>
+                <g transform="translate(387 331)"><rect width="64" height="50" rx="3" fill="rgba(143,164,124,0.13)" stroke="#8fa47c" stroke-width="1" /><use href="#glyph-broadcast" x="23.5" y="10.5" width="17" height="17" color="#8fa47c" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#8fa47c">Radio Studio</text></g>
+                <g transform="translate(453 331)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+
+                <text x="24" y="420" text-anchor="end" font-size="11" fill="#5d6c66">7</text>
+                <rect x="34" y="388" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+                <g transform="translate(233 391)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+                <g transform="translate(255 391)"><rect width="64" height="50" rx="3" fill="rgba(180,123,218,0.13)" stroke="#b47bda" stroke-width="1" /><use href="#glyph-flask" x="23.5" y="10.5" width="17" height="17" color="#b47bda" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#b47bda">Science Lab</text></g>
+                <g transform="translate(321 391)"><rect width="64" height="50" rx="3" fill="rgba(123,142,212,0.13)" stroke="#7b8ed4" stroke-width="1" /><use href="#glyph-runner" x="23.5" y="10.5" width="17" height="17" color="#7b8ed4" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#7b8ed4">Athletics Room</text></g>
+                <g transform="translate(387 391)"><rect width="64" height="50" rx="3" fill="rgba(123,142,212,0.13)" stroke="#7b8ed4" stroke-width="1" /><use href="#glyph-cup" x="23.5" y="10.5" width="17" height="17" color="#7b8ed4" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#7b8ed4">Lounge</text></g>
+                <g transform="translate(453 391)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <p class="caption">
+          The editor at actual size, floors 1&ndash;7 of 25. Eight rooms of three cells
+          plus two elevator shafts &mdash; 26 cells to a floor.
+        </p>
+      </section>
+
+      <section class="wrap">
+        <h2 class="kicker">WHAT YOU GET</h2>
+        <div class="cards">
+          <article class="card">
+            <h3>Strict mode</h3>
+            <p>
+              The default. It holds you to the game's connectivity rules: you can only
+              dig down where there is an elevator, and you cannot delete a room that
+              would cut others off from the vault door.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Free mode</h3>
+            <p>
+              Switches those two rules off so you can sketch in any order and fill the
+              elevators in later. Geometry still holds: rooms never overlap and never
+              run past the edge of a floor.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Save, share, export</h3>
+            <p>
+              Keep a layout as a JSON file, copy a link that carries the whole vault, or
+              export the plan as a PNG. There is no server holding your layout &mdash;
+              the link is the layout.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap" id="checks">
+        <h2>What it checks while you build</h2>
+        <p class="intro">
+          Every problem is listed in a panel of its own as you go, and each one takes
+          you to the room it is about. Nothing is silently corrected.
+        </p>
+        <ul class="checks">
+          <li><span><strong>Rooms stay on the grid.</strong> No overlap, and nothing runs past the 26 cells of a floor.</span></li>
+          <li><span><strong>A floor needs a shaft.</strong> You can only dig down where an elevator already reaches.</span></li>
+          <li><span><strong>Every room keeps a route home.</strong> Deleting one that would strand the rest from the vault door is refused.</span></li>
+          <li><span><strong>Merges line up.</strong> Like joins like, up to three builds wide, and a merged room is deleted whole unless you split it first.</span></li>
+          <li><span><strong>Sizes come from the game.</strong> Each room's width and population requirement are the real ones.</span></li>
+          <li><span><strong>S.P.E.C.I.A.L. is shown, not enforced.</strong> The stat sits beside each room in the palette; it rules nothing.</span></li>
+        </ul>
+      </section>
+
+      <section class="wrap">
+        <h2>Twenty-seven rooms, plus the door</h2>
+        <p class="intro">
+          The palette groups them exactly the way the vault reads &mdash; each group its
+          own colour, from the elevators down to the seasonal rooms.
+        </p>
+        <div class="chips">
+          <span class="chip" style="color: #fdc990">INFRA</span>
+          <span class="chip" style="color: #e3a63c">POWER</span>
+          <span class="chip" style="color: #d7603a">FOOD</span>
+          <span class="chip" style="color: #60b2cb">WATER</span>
+          <span class="chip" style="color: #4ab971">LIVING</span>
+          <span class="chip" style="color: #b67c47">STORAGE</span>
+          <span class="chip" style="color: #b47bda">MEDICAL</span>
+          <span class="chip" style="color: #7b8ed4">TRAINING</span>
+          <span class="chip" style="color: #d27491">CRAFTING</span>
+          <span class="chip" style="color: #8fa47c">MISC</span>
+          <span class="chip" style="color: #16b29e">SEASON</span>
+        </div>
+      </section>
+
+      <section class="wrap two-up" id="faq">
+        <div class="prose">
+          <h2>Why plan a vault at all?</h2>
+          <p>
+            In Fallout Shelter a room is easy to build and awkward to undo. Elevators
+            decide which floors you can reach, merged rooms come out whole, and a layout
+            you dug in the first hour is the one you live with at a hundred dwellers.
+          </p>
+          <p>
+            This planner is the cheap place to make those mistakes. Tear a floor out, try
+            the other arrangement, undo it, and keep the version you liked as a file or a
+            link &mdash; before you spend a cap on it.
+          </p>
+        </div>
+        <div class="faq">
+          <h2>Questions</h2>
+          <dl>
+            <dt>Is this an official tool?</dt>
+            <dd>
+              No. It is an unofficial fan project, not affiliated with, endorsed by, or
+              sponsored by Bethesda Softworks.
+            </dd>
+            <dt>Do I need an account?</dt>
+            <dd>
+              No. There is nothing to sign up for, and no server that keeps your vault.
+              The editing happens in your browser, and a layout only ever exists in a
+              file you save and in the URL you share.
+            </dd>
+            <dt>Where do the room facts come from?</dt>
+            <dd>
+              Sizes, S.P.E.C.I.A.L. stats and unlock requirements are taken from the
+              <a href="https://fallout.fandom.com/wiki/Fallout_Shelter_rooms" rel="noopener">Fallout Wiki</a>.
+              No artwork from the game is used &mdash; every glyph here is drawn from
+              plain shapes.
+            </dd>
+          </dl>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div style="flex: 1">
+          <span class="wordmark">VAULT PLANNER</span>
+          <p class="small">
+            Unofficial fan-made planner. Not affiliated with Bethesda. All artwork
+            original. <em>Fallout</em> and <em>Fallout Shelter</em> are trademarks of
+            their respective owners; the names are used descriptively to say what this
+            tool plans. Code and artwork &copy; 2026 Oleksandr Kalinkin, all rights
+            reserved.
+          </p>
+          <p class="small">
+            Visits to this page are counted with GoatCounter: no cookies, nothing
+            stored on your device, nothing that follows you anywhere else. Your
+            vault is not part of it &mdash; it lives in your browser, in a file and
+            in the link, and nobody here can see what you built.
+          </p>
+        </div>
+        <a class="cta-quiet" href="/planner/">Open the planner</a>
+      </div>
+    </footer>
+
+    <!--
+      The visit counter. It belongs on this page and deliberately nowhere
+      else: a share link in the editor is
+      `origin + pathname + '#' + encodeShare(vault)`, so there the fragment
+      IS someone's layout, and a counter reporting the url it loaded on
+      would file a stranger's vault with a third party. This page has no
+      fragment to leak, and its reach is the question a counter was wanted
+      for in the first place.
+
+      GoatCounter rather than Google Analytics because it sets no cookie
+      and stores nothing on the device, so it needs no consent banner. The
+      banner cost more of this page than its numbers were worth, and it
+      would have counted only the visitors who agreed to be counted.
+
+      The url is written out rather than left protocol-relative as the
+      generated snippet has it: this site is https-only, so `//` buys
+      nothing and would fetch over http if the page ever were not.
+
+      The endpoint is public by design -- it names the site being counted,
+      it is readable in this markup, and there is nothing in it to keep out
+      of the repository.
+    -->
+    <script
+      async
+      data-goatcounter="https://shamahan.goatcounter.com/count"
+      src="https://gc.zgo.at/count.js"
+    ></script>
+  </body>
+</html>

@@ -1,0 +1,150 @@
+:root { color-scheme: dark; }
+/* The editor is an app shell, not a document: the three panes scroll and
+   the page itself never does. Without "overflow: hidden" the shell's height
+   is only advisory -- any pane that fails to constrain itself hands its
+   surplus to the document instead, and a scrolled document drags the
+   toolbar off the top edge while every pane below it stops lining up with
+   the pointer. The 100% chain (html -> body -> #app -> .shell) keeps the
+   shell exactly one viewport tall on every platform, including mobile
+   browsers whose chrome makes 100vh taller than the visible area. */
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+#app { height: 100%; }
+.shell { display: flex; flex-direction: column; height: 100%; }
+.body { display: flex; flex: 1; min-height: 0; }
+/* panels.ts re-renders a panel by replacing the innerHTML of a wrapper div,
+   so <aside class="palette"> is a grandchild of .body rather than a child
+   of it -- while every layout rule below is written for the panel itself.
+   Left in normal flow the wrapper is a flex item with the default
+   min-height:auto, so it grows to the palette's full content height; the
+   panel inside is then never shorter than its own content, its
+   "overflow: auto" never fires, and the extra height reaches the document.
+   display:contents drops the wrappers out of layout so the panels really
+   are the flex items the rest of this file assumes they are. */
+[data-toolbar], [data-palette], [data-problems-panel] { display: contents; }
+.toolbar { display: flex; flex: none; align-items: center; gap: 8px; padding: 0 16px;
+  height: 56px; background: #151c19; border-bottom: 1px solid #26332d; }
+.toolbar .spacer { flex: 1; }
+.brand { font-family: ui-monospace, monospace; letter-spacing: .14em; color: #86968f; font-size: 13px; }
+/* flex: none pins the two side panels to their stated widths -- the canvas
+   between them is the only pane that should take or give room. Each pane
+   owns its scrolling outright: overscroll-behavior keeps a pane that has
+   reached its end from passing the rest of the gesture to its neighbours. */
+.palette { width: 268px; flex: none; overflow: auto; overscroll-behavior: contain;
+  background: #131a17; border-right: 1px solid #26332d; }
+.problems { width: 300px; flex: none; overflow: auto; overscroll-behavior: contain;
+  background: #131a17; border-left: 1px solid #26332d;
+  display: flex; flex-direction: column; }
+.problems .disclaimer { margin-top: auto; padding: 14px 16px; font-size: 11px; color: #6c7b75; }
+.problems .disclaimer p { margin: 0; }
+/* .canvas itself does not scroll -- only .scene-scroll, its child, does.
+   .refusal is absolutely positioned against .canvas, so its containing
+   block is a box that never moves. An earlier version made .canvas the
+   scroll container and positioned .refusal against it directly; that put
+   .refusal's containing block INSIDE the thing that scrolls, so "bottom:
+   16px" pinned it to the bottom of the scrollable content (the first
+   screenful, at scrollTop 0) rather than to the bottom of the visible
+   viewport -- on a tall vault it scrolled away like everything else the
+   moment you scrolled down. Splitting the scroll out into its own child
+   fixes that: .canvas's box is sized by flex layout and stays put, so
+   .refusal stays glued to its visible bottom edge at any scroll position.
+
+   min-width: 0 lets .canvas shrink past the scene's own width. A flex
+   item's default min-width is auto -- the width of its content -- and the
+   scene is a fixed 26 cells across, so without this .canvas refuses to
+   shrink on a narrow window and pushes .body wider than the viewport
+   instead of letting .scene-scroll take the overflow. */
+.canvas { flex: 1; min-width: 0; position: relative; display: flex; }
+/* place-items: center centres content within its container, but when the
+   content is taller than the scroll container (true the moment all 25
+   floors are always drawn -- roughly 1500px against a much shorter
+   viewport) centring makes the top of it sit above the scrollable area,
+   unreachable by scrolling down from a 0 scrollTop. align-content: start
+   keeps the grid's own top edge (floor 1) pinned to the container's top,
+   so scrolling down reaches every floor instead of overshooting past
+   floor 1 into unreachable negative scroll. justify-items keeps the
+   horizontal centring place-items used to provide. */
+.scene-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain;
+  display: grid; align-content: start; justify-items: center; }
+.refusal { position: absolute; left: 16px; right: 16px; bottom: 16px; margin: 0;
+  padding: 10px 14px; background: #182220; border: 1px solid #2b3831; border-radius: 7px;
+  font-size: 13px; color: #6c7b75; pointer-events: none; }
+.refusal:empty { display: none; }
+.palette h2, .problems h2 { font-size: 10px; letter-spacing: .14em; color: #86968f;
+  padding: 14px 16px 8px; margin: 0; font-family: ui-monospace, monospace; }
+.palette h3 { font-size: 10px; letter-spacing: .12em; margin: 12px 0 6px 16px;
+  font-family: ui-monospace, monospace; }
+/* Two rows, not one: the name gets a line to itself and the grey details
+   sit under it. As one flex row the name shared its line with the S.P.E.C.I.A.L.
+   letter, the population requirement and the width, so anything as long as
+   "Water Purification" wrapped to two lines while the grey text stayed
+   beside it -- the name broken up, the details not. The glyph spans both
+   rows down the left; the label spans both text columns so it has the whole
+   width of the button to fit on one line. */
+.palette button { display: grid; grid-template-columns: auto 1fr auto;
+  column-gap: 10px; row-gap: 2px; align-items: center; width: calc(100% - 24px);
+  margin: 0 12px 6px; padding: 8px 10px; background: #182220; color: #dce5e0;
+  border: 1px solid #253029; border-radius: 7px; font: inherit; font-size: 13px;
+  text-align: left; cursor: pointer; }
+.palette button[aria-pressed="true"] { border-color: #e3a63c; background: rgba(227,166,60,.14); }
+.palette button > svg { grid-row: 1 / span 2; }
+.palette .label { grid-column: 2 / span 2; }
+.palette .hint { grid-column: 2; }
+.palette .width { grid-column: 3; justify-self: end; }
+.palette .hint, .palette .width { font-family: ui-monospace, monospace; font-size: 10px; color: #6c7b75; }
+.problems button { display: block; width: calc(100% - 32px); margin: 0 16px 8px; padding: 10px;
+  text-align: left; background: #182220; color: #dce5e0; border: 1px solid #2b3831;
+  border-radius: 7px; font: inherit; font-size: 12px; cursor: pointer; }
+.problems .ok { margin: 0 16px; font-size: 13px; color: #9faea7; }
+.toolbar button { padding: 7px 11px; background: transparent; color: #c3d0ca;
+  border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
+.toolbar button[disabled] { color: #56645e; cursor: default; }
+/* An empty <button role="switch"> has no intrinsic size and every toolbar
+   button is background:transparent/border:transparent, so without a rule
+   of its own the mode switch was a real, working, completely invisible
+   control -- present in the accessibility tree and clickable, but nothing
+   to see or aim at. The visuals are driven entirely by aria-checked (which
+   the switch already set correctly), never by a separate class, so the
+   drawn state can never drift from the accessible one. Colours are picked
+   by eye from the same palette src/render/theme.ts uses for the scene
+   (COLORS.selection '#e3a63c' for the accent, COLORS.line '#202b26' for
+   the off track, COLORS.text '#dce5e0' / COLORS.background '#0e1412' for
+   the knob) rather than imported, since this is CSS and that is TypeScript. */
+.toolbar button[data-mode-toggle] {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 21px;
+  padding: 0;
+  background: #202b26;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+.toolbar button[data-mode-toggle][aria-checked="true"] { background: #e3a63c; }
+.toolbar button[data-mode-toggle]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #dce5e0;
+  transition: left .15s ease, background-color .15s ease;
+}
+.toolbar button[data-mode-toggle][aria-checked="true"]::after { left: 19px; background: #0e1412; }
+.toolbar button[data-mode-toggle]:focus-visible {
+  outline: 2px solid #e3a63c;
+  outline-offset: 2px;
+}
+.mode { font-size: 12px; color: #7e8e87; }
+.mode strong { color: #dce5e0; font-weight: 600; }
+/* :has() reads the switch's own aria-checked rather than a class of its
+   own, so the label's accent tracks the same single source of truth as
+   the switch -- no separate "is it strict" state to fall out of sync. */
+.toolbar:has([data-mode-toggle][aria-checked="true"]) .mode strong { color: #e3a63c; }
+.name { width: 150px; padding: 7px 10px; background: #0e1412; color: #dce5e0;
+  border: 1px solid #2e3d36; border-radius: 6px; font: inherit; font-size: 13px; }

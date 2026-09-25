@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Vault Planner — social card source</title>
+    <!--
+      The source of site/og.png, rendered by tools/make-og.mjs. It is not
+      part of the site: it lives here rather than in site/ precisely so the
+      deploy does not publish it as a page of its own.
+
+      1200x630 is the size every social platform crops from, and the reason
+      this is a PNG at all -- an SVG og:image is ignored by most of them,
+      Facebook, X and Slack included.
+
+      The vault below is the same drawing as everywhere else: the geometry
+      and colours of src/render/scene.ts at 1:1, with glyph paths from
+      src/render/icons.ts. Nothing from the game is used here either.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=block"
+    />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: #0e1412; }
+      .card {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 40px;
+        padding: 64px;
+        background: #0e1412;
+        color: #dce5e0;
+        font-family: Archivo, sans-serif;
+      }
+      .say { width: 500px; flex: none; }
+      .eyebrow {
+        margin: 0 0 24px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 15px;
+        letter-spacing: 0.22em;
+        color: #e3a63c;
+      }
+      h1 {
+        margin: 0;
+        font-size: 58px;
+        font-weight: 700;
+        line-height: 1.0;
+        letter-spacing: -0.028em;
+        color: #f1f6f3;
+      }
+      .lede {
+        margin: 26px 0 0;
+        font-size: 19px;
+        line-height: 1.55;
+        color: #b9c6c0;
+      }
+      .where {
+        position: absolute;
+        left: 64px;
+        bottom: 56px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 17px;
+        letter-spacing: 0.08em;
+        color: #8b9a94;
+      }
+      /* The scene runs off the right edge on purpose: a card is a crop of
+         something larger, and a vault that ends tidily inside the frame
+         reads as a diagram rather than as a screen. */
+      .scene { flex: none; margin-left: auto; margin-right: -110px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="say">
+        <p class="eyebrow">UNOFFICIAL &middot; FALLOUT SHELTER</p>
+        <h1>Plan the vault before you dig.</h1>
+        <p class="lede">
+          Lay rooms out on the 26-cell grid across all 25 floors, and see at once
+          what the game itself would not let you build.
+        </p>
+      </div>
+      <p class="where">vault.shamahan.com</p>
+
+      <svg class="scene" width="634" height="388" viewBox="0 0 634 388" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+        <defs>
+          <symbol id="glyph-vault_door" viewBox="0 0 24 24"><path d="M4 20V6a8 8 0 0116 0v14M12 8a4 4 0 110 8 4 4 0 110-8M12 4v4M12 16v4M8 12H4M20 12h-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-elevator" viewBox="0 0 24 24"><path d="M12 3v18M12 3l-4 5M12 3l4 5M12 21l-4-5M12 21l4-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-bolt" viewBox="0 0 24 24"><path d="M13 2L5 14h6l-2 8 8-12h-6l2-8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-reactor" viewBox="0 0 24 24"><path d="M12 9.5a2.5 2.5 0 110 5 2.5 2.5 0 110-5M12 3a9 9 0 019 9M12 21a9 9 0 01-9-9M19.8 16.5A9 9 0 017.5 19.8M4.2 7.5A9 9 0 0116.5 4.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-cutlery" viewBox="0 0 24 24"><path d="M6 3v7a2 2 0 004 0V3M8 12v9M16.5 3c-1.4 1.2-2 3-2 5 0 1.8.9 3 2 3s2-1.2 2-3c0-2-.6-3.8-2-5zM16.5 11v10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-sprout" viewBox="0 0 24 24"><path d="M12 21V9M12 9C9.5 9 6 7.5 6 4c3.5 0 6 2 6 5zM12 11c2.5 0 6-1.5 6-5-3.5 0-6 2-6 5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-drop" viewBox="0 0 24 24"><path d="M12 3c4.2 5.2 6 7.8 6 10.2A6 6 0 116 13.2C6 10.8 7.8 8.2 12 3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-bed" viewBox="0 0 24 24"><path d="M3 19v-8M3 15h18v4M21 19v-4M6.5 12.5a2 2 0 104 0 2 2 0 10-4 0M11.5 12.5H21" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-crate" viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4V8zM4 8l8 4 8-4M12 12v8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-cross" viewBox="0 0 24 24"><path d="M10 3h4v6h6v4h-6v6h-4v-6H4V9h6V3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-barbell" viewBox="0 0 24 24"><path d="M3 9v6M6 6.5v11M18 6.5v11M21 9v6M6 12h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h5v17H6a2 2 0 00-2 2V5zM20 5a2 2 0 00-2-2h-5v17h5a2 2 0 012 2V5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+          <symbol id="glyph-hammer" viewBox="0 0 24 24"><path d="M14.5 3.5l6 6-2.5 2.5-6-6 2.5-2.5zM11 8L4 15v5h5l7-7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+        </defs>
+
+        <text x="24" y="32" text-anchor="end" font-size="11" fill="#5d6c66">1</text>
+        <rect x="34" y="0" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+        <g transform="translate(35 3)"><rect width="196" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-vault_door" x="89.5" y="10.5" width="17" height="17" color="#fdc990" /><text x="98" y="39" text-anchor="middle" font-size="9" fill="#fdc990">Vault Door</text></g>
+        <g transform="translate(233 3)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+        <!-- Merged rooms, not single builds: at 9px a name like "Power
+             Generator" is wider than the 64px a three-cell room gives it,
+             and the overspill that goes unnoticed in the editor reads as a
+             collision once a social card blows it up. Merging is the
+             vault's own answer to that, not a fudge for the picture. -->
+        <g transform="translate(255 3)"><rect width="196" height="50" rx="3" fill="rgba(227,166,60,0.13)" stroke="#e3a63c" stroke-width="1" /><use href="#glyph-bolt" x="89.5" y="10.5" width="17" height="17" color="#e3a63c" /><text x="98" y="39" text-anchor="middle" font-size="9" fill="#e3a63c">Power Generator</text></g>
+        <g transform="translate(453 3)"><rect width="64" height="50" rx="3" fill="rgba(215,96,58,0.13)" stroke="#d7603a" stroke-width="1" /><use href="#glyph-cutlery" x="23.5" y="10.5" width="17" height="17" color="#d7603a" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#d7603a">Diner</text></g>
+
+        <text x="24" y="92" text-anchor="end" font-size="11" fill="#5d6c66">2</text>
+        <rect x="34" y="60" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+        <g transform="translate(233 63)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+        <g transform="translate(255 63)"><rect width="196" height="50" rx="3" fill="rgba(74,185,113,0.13)" stroke="#4ab971" stroke-width="1" /><use href="#glyph-bed" x="89.5" y="10.5" width="17" height="17" color="#4ab971" /><text x="98" y="39" text-anchor="middle" font-size="9" fill="#4ab971">Living Room</text></g>
+        <g transform="translate(453 63)"><rect width="64" height="50" rx="3" fill="rgba(180,123,218,0.13)" stroke="#b47bda" stroke-width="1" /><use href="#glyph-cross" x="23.5" y="10.5" width="17" height="17" color="#b47bda" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#b47bda">Medbay</text></g>
+
+        <text x="24" y="152" text-anchor="end" font-size="11" fill="#5d6c66">3</text>
+        <rect x="34" y="120" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+        <g transform="translate(233 123)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+        <g transform="translate(255 123)"><rect width="64" height="50" rx="3" fill="rgba(123,142,212,0.13)" stroke="#7b8ed4" stroke-width="1" /><use href="#glyph-barbell" x="23.5" y="10.5" width="17" height="17" color="#7b8ed4" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#7b8ed4">Weight Room</text></g>
+        <g transform="translate(321 123)"><rect width="64" height="50" rx="3" fill="rgba(123,142,212,0.13)" stroke="#7b8ed4" stroke-width="1" /><use href="#glyph-book" x="23.5" y="10.5" width="17" height="17" color="#7b8ed4" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#7b8ed4">Classroom</text></g>
+        <g transform="translate(387 123)"><rect width="64" height="50" rx="3" fill="rgba(182,124,71,0.13)" stroke="#b67c47" stroke-width="1" /><use href="#glyph-crate" x="23.5" y="10.5" width="17" height="17" color="#b67c47" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#b67c47">Storage Room</text></g>
+        <g transform="translate(453 123)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+
+        <text x="24" y="212" text-anchor="end" font-size="11" fill="#5d6c66">4</text>
+        <rect x="34" y="180" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+        <g transform="translate(233 183)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+        <g transform="translate(255 183)"><rect width="64" height="50" rx="3" fill="rgba(215,96,58,0.13)" stroke="#d7603a" stroke-width="1" /><rect width="64" height="50" rx="3" fill="none" stroke="#e3a63c" stroke-width="2" /><use href="#glyph-sprout" x="23.5" y="10.5" width="17" height="17" color="#d7603a" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#d7603a">Garden</text></g>
+        <g transform="translate(321 183)"><rect width="64" height="50" rx="3" fill="rgba(227,166,60,0.13)" stroke="#e3a63c" stroke-width="1" /><use href="#glyph-reactor" x="23.5" y="10.5" width="17" height="17" color="#e3a63c" /><text x="32" y="39" text-anchor="middle" font-size="9" fill="#e3a63c">Nuclear Reactor</text></g>
+        <g transform="translate(453 183)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+
+        <text x="24" y="272" text-anchor="end" font-size="11" fill="#5d6c66">5</text>
+        <rect x="34" y="240" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+        <g transform="translate(233 243)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+        <g transform="translate(255 243)"><rect width="196" height="50" rx="3" fill="rgba(210,116,145,0.13)" stroke="#d27491" stroke-width="1" /><use href="#glyph-hammer" x="89.5" y="10.5" width="17" height="17" color="#d27491" /><text x="98" y="39" text-anchor="middle" font-size="9" fill="#d27491">Weapon Workshop</text></g>
+        <g transform="translate(453 243)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+
+        <text x="24" y="332" text-anchor="end" font-size="11" fill="#5d6c66">6</text>
+        <rect x="34" y="300" width="572" height="56" rx="3" fill="#0f1613" stroke="#202b26" />
+        <g transform="translate(233 303)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+        <g transform="translate(255 303)"><rect width="196" height="50" rx="3" fill="rgba(96,178,203,0.13)" stroke="#60b2cb" stroke-width="1" /><use href="#glyph-drop" x="89.5" y="10.5" width="17" height="17" color="#60b2cb" /><text x="98" y="39" text-anchor="middle" font-size="9" fill="#60b2cb">Water Treatment</text></g>
+        <g transform="translate(453 303)"><rect width="20" height="50" rx="3" fill="rgba(253,201,144,0.13)" stroke="#fdc990" stroke-width="1" /><use href="#glyph-elevator" x="3.5" y="18.5" width="13" height="13" color="#fdc990" /></g>
+      </svg>
+    </div>
+  </body>
+</html>

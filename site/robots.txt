@@ -1,0 +1,7 @@
+# Everything here is meant to be found. The editor at /planner is a single
+# empty div until its script runs, so a crawler that reaches it learns
+# nothing -- the landing page at the root is what carries the words.
+User-agent: *
+Allow: /
+
+Sitemap: https://vault.shamahan.com/sitemap.xml
