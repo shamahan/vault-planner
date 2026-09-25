@@ -4,6 +4,7 @@ import { Store } from '../../src/app/state'
 import { mountPanels } from '../../src/app/panels'
 import { createVault, type Vault } from '../../src/domain/vault'
 import { placeableKinds } from '../../src/domain/catalog'
+import { GLYPH_PATHS } from '../../src/render/icons'
 
 function mount(vault: Vault = createVault()) {
   localStorage.clear()
@@ -37,6 +38,15 @@ describe('panels', () => {
       ['share', 'Copy link'], ['export-png', 'Export PNG'],
       ['undo', 'Undo'], ['redo', 'Redo'],
     ])
+  })
+
+  it('marks the toolbar with the vault door, and names the tool beside it', () => {
+    const { root } = mount()
+    const brand = root.querySelector('.toolbar .brand')!
+    expect(brand.querySelector('path')?.getAttribute('d')).toBe(GLYPH_PATHS.vault_door)
+    // Decoration: the words beside it already say what it says.
+    expect(brand.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+    expect(brand.textContent).toBe('VAULT PLANNER')
   })
 
   it('offers nothing to type into', () => {

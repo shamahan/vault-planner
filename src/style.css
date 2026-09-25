@@ -26,7 +26,9 @@ body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
 .toolbar { display: flex; flex: none; align-items: center; gap: 8px; padding: 0 16px;
   height: 56px; background: #151c19; border-bottom: 1px solid #26332d; }
 .toolbar .spacer { flex: 1; }
-.brand { font-family: ui-monospace, monospace; letter-spacing: .14em; color: #86968f; font-size: 13px; }
+.brand { display: inline-flex; align-items: center; gap: 10px;
+  font-family: ui-monospace, monospace; letter-spacing: .14em; color: #86968f; font-size: 13px; }
+.brand svg { flex: none; color: #e3a63c; }
 /* flex: none pins the two side panels to their stated widths -- the canvas
    between them is the only pane that should take or give room. Each pane
    owns its scrolling outright: overscroll-behavior keeps a pane that has

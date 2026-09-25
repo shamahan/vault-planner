@@ -26,7 +26,11 @@ export function renderToolbar(store: Store): string {
   ]
   return (
     `<header class="toolbar">` +
-    `<span class="brand">VAULT PLANNER</span>` +
+    // The mark is the vault door glyph -- the favicon is the same path -- so
+    // it is drawn from GLYPH_PATHS rather than copied, and cannot drift.
+    `<span class="brand"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">` +
+    `<path d="${GLYPH_PATHS.vault_door}" fill="none" stroke="currentColor" stroke-width="1.5" ` +
+    `stroke-linecap="round" stroke-linejoin="round"/></svg>VAULT PLANNER</span>` +
     actions.map(([id, label]) =>
       `<button type="button" data-action="${id}">${label}</button>`).join('') +
     `<span class="spacer"></span>` +

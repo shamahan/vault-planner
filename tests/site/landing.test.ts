@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import config from '../../vite.config'
+import { GLYPH_PATHS } from '../../src/render/icons'
 
 /**
  * The landing page is the one file here that no other code imports, so
@@ -91,6 +92,67 @@ describe('the social card', () => {
     expect(landing).toContain('content="https://vault.shamahan.com/og.png"')
     expect(landingCode).toMatch(/name="twitter:card" content="summary_large_image"/)
     expect(() => readFileSync(new URL('../../site/og.png', import.meta.url))).not.toThrow()
+  })
+})
+
+describe('the mark', () => {
+  const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url))
+
+  /**
+   * One cog with VP in it is the vault door in the editor, the favicon, and
+   * the door in the two hand-drawn pictures of the editor. Only the first is
+   * code; the rest are copies of its path in files nothing imports, and a
+   * redrawn door would leave them showing the old one without a word.
+   */
+  it.each(['site/favicon.svg', 'site/index.html', 'tools/og-image.html'])(
+    'is the vault door glyph in %s',
+    (path) => {
+      expect(read(path).toString('utf8')).toContain(`d="${GLYPH_PATHS.vault_door}"`)
+    },
+  )
+
+  /**
+   * The header and the picture of the toolbar carry no path of their own:
+   * they <use> the door symbol the picture of the editor defines, which the
+   * test above holds to the glyph. Take that symbol away and both go blank
+   * without an error anywhere, so its being there is asserted too.
+   */
+  it('heads the landing page and its picture of the toolbar, from the one symbol', () => {
+    expect(landingCode.split('id="glyph-vault_door"')).toHaveLength(2)
+    const lockup = (cls: string) =>
+      new RegExp(`class="${cls}"><svg [^>]*aria-hidden="true"><use href="#glyph-vault_door" /></svg>VAULT PLANNER<`)
+    expect(landingCode).toMatch(lockup('wordmark'))
+    expect(landingCode).toMatch(lockup('brand'))
+  })
+
+  it.each([
+    ['the landing page', () => landingCode],
+    ['the editor', () => editorCode],
+  ])('is linked from %s', (_name, page) => {
+    expect(page()).toContain('<link rel="icon" href="/favicon.ico" sizes="32x32" />')
+    expect(page()).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />')
+    expect(page()).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
+  })
+
+  /**
+   * Both bitmaps are renders committed by hand (`node tools/make-icons.mjs`),
+   * so they are read back the way og.png is: a PNG's size from its IHDR, and
+   * the .ico's one entry, which has to be the 32px PNG it says it is.
+   */
+  it('ships a touch icon at the size iOS asks for', () => {
+    const png = read('site/apple-touch-icon.png')
+    expect(png.subarray(12, 16).toString('ascii')).toBe('IHDR')
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([180, 180])
+  })
+
+  it('ships a favicon.ico holding one 32px PNG', () => {
+    const ico = read('site/favicon.ico')
+    expect([ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4)]).toEqual([0, 1, 1])
+    expect([ico.readUInt8(6), ico.readUInt8(7)]).toEqual([32, 32])
+    const offset = ico.readUInt32LE(18)
+    const png = ico.subarray(offset, offset + ico.readUInt32LE(14))
+    expect(png.subarray(12, 16).toString('ascii'), 'the .ico entry is not a PNG').toBe('IHDR')
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([32, 32])
   })
 })
 

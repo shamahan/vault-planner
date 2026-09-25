@@ -1,5 +1,13 @@
 export const GLYPH_PATHS: Record<string, string> = {
-  vault_door: 'M4 20V6a8 8 0 0116 0v14M12 8a4 4 0 110 8 4 4 0 110-8M12 4v4M12 16v4M8 12H4M20 12h-4',
+  /**
+   * The vault door is also the site's mark: an eight-tooth cog -- the door
+   * in the game is one -- with V and P inside, the P's bowl hung off the V's
+   * right arm. site/favicon.svg, and the copies of this glyph in
+   * site/index.html and tools/og-image.html, draw this exact path, and
+   * tests/site/landing.test.ts holds them to it. Change one, change all.
+   */
+  vault_door:
+    'M10.3 3.47L10.6 1.59A10.5 10.5 0 0 1 13.4 1.59L13.7 3.47A8.7 8.7 0 0 1 16.83 4.77L18.37 3.65A10.5 10.5 0 0 1 20.35 5.63L19.23 7.17A8.7 8.7 0 0 1 20.53 10.3L22.41 10.6A10.5 10.5 0 0 1 22.41 13.4L20.53 13.7A8.7 8.7 0 0 1 19.23 16.83L20.35 18.37A10.5 10.5 0 0 1 18.37 20.35L16.83 19.23A8.7 8.7 0 0 1 13.7 20.53L13.4 22.41A10.5 10.5 0 0 1 10.6 22.41L10.3 20.53A8.7 8.7 0 0 1 7.17 19.23L5.63 20.35A10.5 10.5 0 0 1 3.65 18.37L4.77 16.83A8.7 8.7 0 0 1 3.47 13.7L1.59 13.4A10.5 10.5 0 0 1 1.59 10.6L3.47 10.3A8.7 8.7 0 0 1 4.77 7.17L3.65 5.63A10.5 10.5 0 0 1 5.63 3.65L7.17 4.77A8.7 8.7 0 0 1 10.3 3.47ZM7.28 8.25L10.28 15.75L13.28 8.25H14.68A2.1 2.1 0 0 1 14.68 12.45H11.6',
   elevator: 'M12 3v18M12 3l-4 5M12 3l4 5M12 21l-4-5M12 21l4-5',
   bolt: 'M13 2L5 14h6l-2 8 8-12h-6l2-8z',
   reactor: 'M12 9.5a2.5 2.5 0 110 5 2.5 2.5 0 110-5M12 3a9 9 0 019 9M12 21a9 9 0 01-9-9M19.8 16.5A9 9 0 017.5 19.8M4.2 7.5A9 9 0 0116.5 4.2',
