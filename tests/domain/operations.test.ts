@@ -92,3 +92,82 @@ describe('operations', () => {
     expect(applyOp(createVault(), { kind: 'rename', name: 'Vault 76' }).name).toBe('Vault 76')
   })
 })
+
+describe('swap', () => {
+  it('trades two rooms of the same width between floors', () => {
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 0, x: 10, w: 3 },
+      { id: 'b', type: 'garden', floor: 1, x: 4, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'swap', id: 'a', with: 'b', x: 4 })
+    expect(findRoom(after, 'a')).toMatchObject({ floor: 1, x: 4, w: 3 })
+    expect(findRoom(after, 'b')).toMatchObject({ floor: 0, x: 10, w: 3 })
+  })
+
+  it('puts a narrower target against the left edge of the span it moves into', () => {
+    const v = vaultWith(
+      { id: 'a', type: 'overseers_office', floor: 0, x: 10, w: 6 },
+      { id: 'b', type: 'diner', floor: 1, x: 4, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'swap', id: 'a', with: 'b', x: 4 })
+    expect(findRoom(after, 'a')).toMatchObject({ floor: 1, x: 4, w: 6 })
+    expect(findRoom(after, 'b')).toMatchObject({ floor: 0, x: 10, w: 3 })
+  })
+
+  it('puts the target against the right edge when the left would cross the room it swapped with', () => {
+    // Office [3,9), diner [0,3) on its left. The office takes [0,6); the
+    // diner at the office's old left edge, [3,6), would sit inside it.
+    const v = vaultWith(
+      { id: 'a', type: 'overseers_office', floor: 1, x: 3, w: 6 },
+      { id: 'b', type: 'diner', floor: 1, x: 0, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'swap', id: 'a', with: 'b', x: 0 })
+    expect(findRoom(after, 'a')).toMatchObject({ floor: 1, x: 0, w: 6 })
+    expect(findRoom(after, 'b')).toMatchObject({ floor: 1, x: 6, w: 3 })
+  })
+
+  it('keeps the left edge when the target stood on the right', () => {
+    const v = vaultWith(
+      { id: 'a', type: 'overseers_office', floor: 1, x: 0, w: 6 },
+      { id: 'b', type: 'diner', floor: 1, x: 6, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'swap', id: 'a', with: 'b', x: 3 })
+    expect(findRoom(after, 'a')).toMatchObject({ floor: 1, x: 3, w: 6 })
+    expect(findRoom(after, 'b')).toMatchObject({ floor: 1, x: 0, w: 3 })
+  })
+
+  it('merges each room with its new neighbours, keeping its id', () => {
+    const v = vaultWith(
+      { id: 'n', type: 'diner', floor: 1, x: 0, w: 3 },
+      { id: 'b', type: 'garden', floor: 1, x: 3, w: 3 },
+      { id: 'a', type: 'diner', floor: 2, x: 10, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'swap', id: 'a', with: 'b', x: 3 })
+    expect(findRoom(after, 'a')).toMatchObject({ floor: 1, x: 0, w: 6 })
+    expect(findRoom(after, 'n')).toBeUndefined()
+    expect(findRoom(after, 'b')).toMatchObject({ floor: 2, x: 10, w: 3 })
+  })
+
+  it('survives the room absorbing its own target', () => {
+    // Two diners side by side but unmerged, as a hand-edited file can hold
+    // them. After the swap they touch again and weld: there is no B left
+    // for the second merge to start from.
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 1, x: 0, w: 6 },
+      { id: 'b', type: 'diner', floor: 1, x: 6, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'swap', id: 'a', with: 'b', x: 3 })
+    expect(findRoom(after, 'b')).toBeUndefined()
+    expect(findRoom(after, 'a')).toMatchObject({ floor: 1, x: 0, w: 9 })
+  })
+
+  it('leaves the vault it was given untouched', () => {
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 0, x: 10, w: 3 },
+      { id: 'b', type: 'garden', floor: 1, x: 4, w: 3 },
+    )
+    applyOp(v, { kind: 'swap', id: 'a', with: 'b', x: 4 })
+    expect(findRoom(v, 'a')).toMatchObject({ floor: 0, x: 10 })
+    expect(findRoom(v, 'b')).toMatchObject({ floor: 1, x: 4 })
+  })
+})

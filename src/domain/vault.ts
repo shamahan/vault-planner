@@ -1,5 +1,5 @@
 import { VAULT_DOOR_TYPE, kindOf } from './catalog'
-import { touches } from './grid'
+import { overlaps, touches } from './grid'
 
 export type RoomId = string
 
@@ -52,6 +52,7 @@ export type Op =
   | { kind: 'remove'; id: RoomId }
   | { kind: 'removeMany'; ids: RoomId[] }
   | { kind: 'move'; id: RoomId; floor: number; x: number }
+  | { kind: 'swap'; id: RoomId; with: RoomId; x: number }
   | { kind: 'split'; id: RoomId }
   | { kind: 'rename'; name: string }
 
@@ -114,6 +115,21 @@ function splitRoom(rooms: Room[], id: RoomId, nextId: () => RoomId): Room[] {
   return rooms.filter((r) => r.id !== id).concat(pieces)
 }
 
+/**
+ * Where B lands when A swaps places with it and takes left edge `x`:
+ * inside the span A leaves, against its left edge -- unless A and B share
+ * a floor and that would cross A's new span, in which case against its
+ * right edge. The right edge is then always clear: A's new span has to
+ * cover B's old one, so if B stood left of A, A now ends no further right
+ * than `B.x + A.w`, which is at most where A's old span ends less B's
+ * width; mirrored, B on the right never needs the right edge at all.
+ * Exported because the drag layer draws B's ghost where this puts it.
+ */
+export function swapLanding(a: Room, b: Room, x: number): number {
+  if (a.floor !== b.floor) return a.x
+  return overlaps({ x: a.x, w: b.w }, { x, w: a.w }) ? a.x + a.w - b.w : a.x
+}
+
 export function applyOp(v: Vault, op: Op): Vault {
   const next = clone(v)
 
@@ -150,6 +166,24 @@ export function applyOp(v: Vault, op: Op): Vault {
       room.floor = op.floor
       room.x = op.x
       next.rooms = mergeNeighbours(next.rooms, room)
+      return next
+    }
+
+    case 'swap': {
+      const a = next.rooms.find((r) => r.id === op.id)
+      const b = next.rooms.find((r) => r.id === op.with)
+      if (!a || !b || a === b) return next
+      const bFloor = b.floor
+      const bx = swapLanding(a, b, op.x)
+      b.floor = a.floor
+      b.x = bx
+      a.floor = bFloor
+      a.x = op.x
+      next.rooms = mergeNeighbours(next.rooms, a)
+      // A can absorb B outright -- same type, landing side by side -- and
+      // then there is no B left to merge.
+      const survivor = next.rooms.find((r) => r.id === op.with)
+      if (survivor) next.rooms = mergeNeighbours(next.rooms, survivor)
       return next
     }
 
