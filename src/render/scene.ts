@@ -68,6 +68,9 @@ function roomGroup(room: Room, opts: SceneOptions, top: number): string {
   const stroke = blamed ? COLORS.problem : color
   const attrs = [
     `data-room-id="${escapeText(room.id)}"`,
+    // What the drag layer may pick up. The vault door never is: every
+    // operation on it is refused (see validate.ts).
+    kind.placeable ? 'data-movable="true"' : '',
     blamed ? 'data-problem="true"' : '',
     selected ? 'data-selected="true"' : '',
     `transform="translate(${x + 1} ${top + 3})"`,
@@ -216,6 +219,20 @@ function ghostSlot(): string {
   )
 }
 
+/**
+ * The second ghost a drag needs when it would swap two rooms: where the
+ * room under the pointer would go. The same as ghostSlot in every respect
+ * -- always emitted, hidden, every attribute valued, no pointer events, no
+ * data-room-id, moved only by src/app/interactions.ts -- and emitted just
+ * before it, so the dragged room's own ghost stays the SVG's last child.
+ */
+function swapGhostSlot(): string {
+  return (
+    '<rect data-ghost-swap="true" x="0" y="0" width="0" height="0" fill="none" ' +
+    'stroke-width="2" stroke-dasharray="4 3" pointer-events="none" visibility="hidden"/>'
+  )
+}
+
 function legendBlock(v: Vault, y: number, width: number): string {
   const counts = new Map<string, number>()
   for (const r of v.rooms) counts.set(r.type, (counts.get(r.type) ?? 0) + 1)
@@ -294,6 +311,7 @@ export function renderScene(v: Vault, opts: SceneOptions = {}): string {
     parts.push(legendBlock(v, gridTop + gridHeight + 24, width))
   }
 
+  parts.push(swapGhostSlot())
   parts.push(ghostSlot())
   parts.push('</svg>')
   return parts.join('')

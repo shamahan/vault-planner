@@ -132,12 +132,33 @@ describe('scene', () => {
 
   it('always emits a hidden ghost slot that is never mistaken for a room', () => {
     const svg = renderScene(sample())
-    const ghostTag = svg.match(/<rect data-ghost[^>]*\/>/)?.[0]
+    const ghostTag = svg.match(/<rect data-ghost="true"[^>]*\/>/)?.[0]
     expect(ghostTag).toBeTruthy()
     expect(ghostTag).toContain('visibility="hidden"')
     expect(ghostTag).not.toContain('data-room-id')
     // Last child of the svg, so it always paints over rooms and candidates.
     expect(svg.trimEnd().endsWith(`${ghostTag}</svg>`)).toBe(true)
+  })
+
+  it('emits a second hidden ghost slot for a swap, just before the first', () => {
+    const svg = renderScene(sample())
+    const swapTag = svg.match(/<rect data-ghost-swap="true"[^>]*\/>/)?.[0]
+    const ghostTag = svg.match(/<rect data-ghost="true"[^>]*\/>/)?.[0]
+    expect(swapTag).toBeTruthy()
+    expect(swapTag).toContain('visibility="hidden"')
+    expect(swapTag).toContain('pointer-events="none"')
+    expect(swapTag).not.toContain('data-room-id')
+    // Every attribute carries a value: svgToPngBlob parses this as strict XML.
+    expect(swapTag).toMatch(/^<rect( [a-z-]+="[^"]*")+\/>$/)
+    expect(svg.trimEnd().endsWith(`${swapTag}${ghostTag}</svg>`)).toBe(true)
+  })
+
+  it('marks every room but the vault door as movable', () => {
+    const svg = renderScene(sample())
+    for (const id of ['e0', 'l0', 'e1', 'g1']) {
+      expect(svg).toContain(`data-room-id="${id}" data-movable="true"`)
+    }
+    expect(svg).not.toMatch(/data-room-id="door" data-movable/)
   })
 
   it('does not try to draw a hundred-million floors for a room on an absurd floor', () => {
