@@ -105,6 +105,7 @@ function refuse(reason: string, blame: RoomId[] = []): Verdict {
 function touchedIds(op: Op): RoomId[] {
   switch (op.kind) {
     case 'remove': case 'move': case 'split': return [op.id]
+    case 'swap': return [op.id, op.with]
     case 'removeMany': return op.ids
     default: return []
   }
@@ -123,6 +124,44 @@ function survivingBlame(v: Vault, ids: RoomId[], op: Op): RoomId[] {
   return survivors.length > 0 ? survivors : touchedIds(op)
 }
 
+/**
+ * What makes a swap wrong before any geometry is worked out. Both rooms
+ * are known to exist: canApply has already looked each of them up.
+ */
+function swapRefusal(v: Vault, op: Extract<Op, { kind: 'swap' }>): Verdict | null {
+  const a = findRoom(v, op.id) as Room
+  const b = findRoom(v, op.with) as Room
+  const aName = kindOf(a.type).name
+  const bName = kindOf(b.type).name
+  if (a.id === b.id) return refuse('A room cannot swap places with itself.', [a.id])
+  if (b.w > a.w) return refuse(`The ${bName} is wider than the ${aName} and would not fit in its place.`, [b.id])
+  // A swap puts A where B stood. An x that leaves part of B's old span
+  // uncovered is a move plus a relocation, not a swap; the drag layer
+  // never builds one, so this only guards the op against a bad caller.
+  if (op.x > b.x || op.x + a.w < b.x + b.w) {
+    return refuse(`The ${aName} has to cover the ${bName} to swap places with it.`, [a.id, b.id])
+  }
+  return null
+}
+
+/**
+ * A new overlap reads as a description of the result -- "Diner and Lounge
+ * overlap on floor 3" -- which is right for a placement and odd as the
+ * answer to a move. When the room being moved is one of the pair, say what
+ * the move ran into instead. The moved room still has its id in `after`:
+ * mergeNeighbours hands a merged group the id of the room that seeded it.
+ */
+function refusalText(op: Op, after: Vault, problem: Problem): string {
+  if (problem.kind !== 'overlap') return problem.message
+  if (op.kind !== 'move' && op.kind !== 'swap') return problem.message
+  if (!problem.rooms.includes(op.id)) return problem.message
+  const moved = findRoom(after, op.id)
+  const otherId = problem.rooms.find((id) => id !== op.id)
+  const other = otherId === undefined ? undefined : findRoom(after, otherId)
+  if (!moved || !other) return problem.message
+  return `No room for the ${kindOf(moved.type).name} here: the ${kindOf(other.type).name} is in the way.`
+}
+
 export function canApply(v: Vault, op: Op, mode: Mode): Verdict {
   // The door is not yours to place, move or delete — and you can't touch
   // a room that isn't there.
@@ -139,6 +178,11 @@ export function canApply(v: Vault, op: Op, mode: Mode): Verdict {
     return refuse('The vault door is part of the vault and cannot be placed.', [VAULT_DOOR_ID])
   }
 
+  if (op.kind === 'swap') {
+    const refusal = swapRefusal(v, op)
+    if (refusal) return refusal
+  }
+
   const after = applyOp(v, op)
 
   // Geometry: always, in both modes. Keyed by the span each problem
@@ -148,7 +192,7 @@ export function canApply(v: Vault, op: Op, mode: Mode): Verdict {
   const geometryBefore = new Set(geometryProblems(v).map((p) => spanKey(v, p)))
   for (const problem of geometryProblems(after)) {
     if (geometryBefore.has(spanKey(after, problem))) continue
-    return refuse(problem.message, survivingBlame(v, problem.rooms, op))
+    return refuse(refusalText(op, after, problem), survivingBlame(v, problem.rooms, op))
   }
 
   if (mode === 'free') return { ok: true }

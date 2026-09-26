@@ -229,3 +229,97 @@ describe('canApply: refusal edge cases', () => {
     expect(diners[1]).toMatchObject({ x: 19, w: 3 })
   })
 })
+
+describe('canApply: swap', () => {
+  // Floor 0: door [0,9), elevator e0 at 9, diner d0 [10,13), office o0 [13,19).
+  // Floor 1: elevator e1 at 9, garden g1 [10,13), lounge l1 [13,16).
+  // Floor 3: a medbay with no route to anything.
+  const swapVault = (): Vault => vaultWith(
+    { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+    { id: 'd0', type: 'diner', floor: 0, x: 10, w: 3 },
+    { id: 'o0', type: 'overseers_office', floor: 0, x: 13, w: 6 },
+    { id: 'e1', type: 'elevator', floor: 1, x: 9, w: 1 },
+    { id: 'g1', type: 'garden', floor: 1, x: 10, w: 3 },
+    { id: 'l1', type: 'lounge', floor: 1, x: 13, w: 3 },
+    { id: 'lost', type: 'medbay', floor: 3, x: 0, w: 3 },
+  )
+
+  it('accepts two rooms of the same width', () => {
+    expect(canApply(swapVault(), { kind: 'swap', id: 'd0', with: 'g1', x: 10 }, 'strict').ok).toBe(true)
+  })
+
+  it('accepts a narrower target that fits where the wider room stood', () => {
+    expect(canApply(swapVault(), { kind: 'swap', id: 'o0', with: 'l1', x: 13 }, 'strict').ok).toBe(true)
+  })
+
+  it('refuses a target wider than the room dropped on it', () => {
+    const verdict = canApply(swapVault(), { kind: 'swap', id: 'l1', with: 'o0', x: 13 }, 'strict')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) {
+      expect(verdict.reason).toBe("The Overseer's Office is wider than the Lounge and would not fit in its place.")
+      expect(verdict.blame).toEqual(['o0'])
+    }
+  })
+
+  it('names what is in the way when the wider room has no room beside the target', () => {
+    // The office over the garden needs three cells more; from x 10 they are the lounge's.
+    const verdict = canApply(swapVault(), { kind: 'swap', id: 'o0', with: 'g1', x: 10 }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) {
+      expect(verdict.reason).toBe("No room for the Overseer's Office here: the Lounge is in the way.")
+    }
+  })
+
+  it('refuses the vault door on either side', () => {
+    const v = vaultWith({ id: 'w1', type: 'weapon_workshop', floor: 1, x: 10, w: 9 })
+    const ops = [
+      { kind: 'swap', id: 'door', with: 'w1', x: 10 },
+      { kind: 'swap', id: 'w1', with: 'door', x: 0 },
+    ] as const
+    for (const op of ops) {
+      const verdict = canApply(v, op, 'free')
+      expect(verdict.ok).toBe(false)
+      if (!verdict.ok) expect(verdict.reason).toMatch(/vault door/i)
+    }
+  })
+
+  it('refuses a room it cannot find', () => {
+    const verdict = canApply(swapVault(), { kind: 'swap', id: 'd0', with: 'nowhere', x: 10 }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toMatch(/no room/i)
+  })
+
+  it('refuses a room swapping with itself', () => {
+    const verdict = canApply(swapVault(), { kind: 'swap', id: 'd0', with: 'd0', x: 10 }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toBe('A room cannot swap places with itself.')
+  })
+
+  it('refuses an x that leaves part of the target uncovered', () => {
+    const verdict = canApply(swapVault(), { kind: 'swap', id: 'o0', with: 'l1', x: 16 }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toBe("The Overseer's Office has to cover the Lounge to swap places with it.")
+  })
+
+  it('refuses in strict mode a swap that strands a room, and allows it in free mode', () => {
+    // The garden goes where the medbay was, with no route; the medbay
+    // gains one. One stranded room traded for another is still a new one.
+    const op = { kind: 'swap', id: 'g1', with: 'lost', x: 0 } as const
+    const verdict = canApply(swapVault(), op, 'strict')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toBe('That would leave 1 room with no route to the vault door.')
+    expect(canApply(swapVault(), op, 'free').ok).toBe(true)
+  })
+
+  it('answers a move that runs into a room with what is in the way', () => {
+    const verdict = canApply(swapVault(), { kind: 'move', id: 'l1', floor: 1, x: 11 }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toBe('No room for the Lounge here: the Garden is in the way.')
+  })
+
+  it('still describes a placement overlap the way it always has', () => {
+    const verdict = canApply(swapVault(), { kind: 'place', type: 'garden', floor: 0, x: 11 }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toMatch(/overlap on floor 1\.$/)
+  })
+})
