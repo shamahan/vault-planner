@@ -953,6 +953,44 @@ describe('dragging a room', () => {
     expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
   })
 
+  it('picks a room up with a finger held still on it, and drops it where the finger lets go', () => {
+    vi.useFakeTimers()
+    try {
+      const { canvas, store } = mount(dragVault())
+      press(canvas, 'd0', { floor: 0, x: 10 }, 'touch')
+      expect(canvas.querySelector('[data-dragging]')).toBeNull()
+      vi.advanceTimersByTime(500)
+      expect(canvas.querySelector('[data-room-id="d0"]')?.hasAttribute('data-dragging')).toBe(true)
+      stubZeroLayout(canvas.querySelector('svg')!)
+      moveTo(canvas, { floor: 1, x: 13 }, 'touch')
+      release(canvas, { floor: 1, x: 13 }, 'touch')
+      expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 1, x: 13 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lets a finger that moves before the long press scroll, and picks nothing up', () => {
+    vi.useFakeTimers()
+    try {
+      const { canvas } = mount(dragVault())
+      press(canvas, 'd0', { floor: 0, x: 10 }, 'touch')
+      pointer(canvas, 'pointermove', px(10) + 20, py(0), 'touch')
+      vi.advanceTimersByTime(500)
+      expect(canvas.querySelector('[data-dragging]')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps the browser's own menu out of a long press", () => {
+    const { canvas } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 }, 'touch')
+    const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+    canvas.querySelector('[data-room-id="d0"]')!.dispatchEvent(menu)
+    expect(menu.defaultPrevented).toBe(true)
+  })
+
   it('puts an armed palette room down on taking hold of a room', () => {
     const { canvas, store } = mount(dragVault())
     store.setTool('diner')
@@ -1155,5 +1193,40 @@ describe('zoom', () => {
     click(canvas, '[data-zoom-fit]')
     expect(canvas.querySelector('[data-zoom-level]')?.textContent).toBe('100%')
     expect(canvas.querySelector('[data-zoom-fit]')?.getAttribute('aria-pressed')).toBe('true')
+  })
+})
+
+describe('pinching', () => {
+  function fingers(canvas: HTMLElement) {
+    const scroll = canvas.querySelector('.scene-scroll')!
+    return (type: string, pointerId: number, clientX: number) =>
+      scroll.dispatchEvent(new FakePointerEvent(type, {
+        bubbles: true, clientX, clientY: 100, pointerId, pointerType: 'touch', button: 0, buttons: type === 'pointerup' ? 0 : 1,
+      }))
+  }
+  const width = (canvas: HTMLElement) => canvas.querySelector<SVGSVGElement>('.scene svg')!.style.width
+  const natural = (canvas: HTMLElement) => Number(canvas.querySelector('.scene svg')!.getAttribute('width'))
+
+  it('zooms with two fingers, in step with how far they spread', () => {
+    const { canvas } = mount()
+    const finger = fingers(canvas)
+    finger('pointerdown', 1, 100)
+    finger('pointerdown', 2, 200)
+    finger('pointermove', 2, 250)
+    expect(width(canvas)).toBe(`${Math.round(natural(canvas) * 1.5)}px`)
+    expect(canvas.querySelector('[data-zoom-fit]')?.getAttribute('aria-pressed')).toBe('false')
+    finger('pointerup', 2, 250)
+    finger('pointerup', 1, 100)
+  })
+
+  it('stops at the ends of the zoom steps', () => {
+    const { canvas } = mount()
+    const finger = fingers(canvas)
+    finger('pointerdown', 1, 100)
+    finger('pointerdown', 2, 110)
+    finger('pointermove', 2, 1000)
+    expect(width(canvas)).toBe(`${Math.round(natural(canvas) * 2)}px`)
+    finger('pointermove', 2, 101)
+    expect(width(canvas)).toBe(`${Math.round(natural(canvas) * 0.5)}px`)
   })
 })

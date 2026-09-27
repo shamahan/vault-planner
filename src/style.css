@@ -77,9 +77,12 @@ body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
    horizontal centring place-items used to provide. */
 .scene-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain;
   display: grid; align-content: start; justify-items: center;
-  /* The sides are what applyZoom subtracts before fitting (16 + 16); the
-     bottom lets the last floors scroll clear of the dock. */
-  padding: 0 16px 128px; }
+  /* applyZoom reads the sides back before it fits; the bottom lets the last
+     floors scroll clear of the dock. */
+  padding: 0 16px 128px;
+  /* One finger scrolls, as the browser does it; two are a pinch, which is
+     the editor's zoom rather than the page's (src/app/interactions.ts). */
+  touch-action: pan-x pan-y; }
 /* The dock under the grid: the refusal line over the bar for a selected,
    armed or carried room (src/app/dock.ts). Absolutely placed against
    .canvas, like .refusal was on its own, so it stays at the visible bottom
@@ -155,7 +158,7 @@ kbd { font-family: ui-monospace, monospace; font-size: 10.5px; padding: 1px 5px;
    hand marks what can be picked up -- never the vault door, which the
    scene leaves unmarked -- and .dragging holds the closed hand everywhere
    while a room is carried. */
-.scene { -webkit-user-select: none; user-select: none; }
+.scene { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .scene [data-movable] { cursor: grab; }
 .canvas.dragging, .canvas.dragging * { cursor: grabbing; }
 .scene [data-dragging] { opacity: .35; }

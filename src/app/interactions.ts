@@ -10,7 +10,7 @@ import { renderDock } from './dock'
 import { createDropResolver, type DropPlan, type Ghost } from './drag'
 import { highlightFor, type Highlight, type Spot } from './highlight'
 import type { Store } from './state'
-import { fitScale, stepZoom } from './zoom'
+import { fitScale, stepZoom, ZOOM_STEPS } from './zoom'
 
 export function describeRefusal(verdict: Verdict): string {
   return verdict.ok ? '' : verdict.reason
@@ -126,6 +126,15 @@ export function resolvePlacement(candidatesOnFloor: { x: number; w: number }[], 
 /** How far a press on a room may travel, in page pixels, and still be a click. */
 const DRAG_THRESHOLD_PX = 4
 
+/**
+ * How long a finger has to rest on a room before it picks the room up, and
+ * how far it may wander meanwhile, in page pixels, and still be resting.
+ * A finger that moves sooner or further is scrolling: on a 25-floor vault
+ * it is far more often reaching for the floors below than for a room.
+ */
+const LONG_PRESS_MS = 450
+const LONG_PRESS_SLOP_PX = 10
+
 /** Returns a disposer: removes every listener this call added and unsubscribes from the store. */
 export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   // Build the DOM skeleton once, rather than inside paint(). .scene-scroll
@@ -199,8 +208,11 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     if (!svg) return
     const natural = Number(svg.getAttribute('width'))
     // Less the scroll pane's own side padding, so a fitted grid never
-    // needs a horizontal scrollbar.
-    scale = zoom === 'fit' ? fitScale(scrollEl.clientWidth - 32, natural) : zoom
+    // needs a horizontal scrollbar. Read back from the styles, since the
+    // padding differs between a phone and a wider screen.
+    const style = getComputedStyle(scrollEl)
+    const sides = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0)
+    scale = zoom === 'fit' ? fitScale(scrollEl.clientWidth - sides, natural) : zoom
     svg.style.width = `${Math.round(natural * scale)}px`
     svg.style.height = 'auto'
     zoomLevelEl.textContent = `${Math.round(scale * 100)}%`
@@ -401,8 +413,50 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     swallowClick = true
   }
 
-  const startDrag = (p: Press, event: PointerEvent): void => {
+  // Fingers on the canvas, by pointer: two of them are a pinch.
+  const fingers = new Map<number, { x: number; y: number }>()
+  let pinch: { distance: number; scale: number } | null = null
+  let longPress: ReturnType<typeof setTimeout> | null = null
+
+  const cancelLongPress = (): void => {
+    if (longPress !== null) clearTimeout(longPress)
+    longPress = null
+  }
+
+  const forgetFinger = (pointerId: number): void => {
+    fingers.delete(pointerId)
+    if (fingers.size < 2) pinch = null
+  }
+
+  // Keeps the point of the scene under (clientX, clientY) there while the
+  // scale changes, so a pinch zooms into what is between the fingers.
+  const zoomAround = (next: number, clientX: number, clientY: number): void => {
+    const box = scrollEl.getBoundingClientRect()
+    const x = scrollEl.scrollLeft + clientX - box.left
+    const y = scrollEl.scrollTop + clientY - box.top
+    const ratio = next / scale
+    zoom = next
+    applyZoom()
+    scrollEl.scrollLeft = x * ratio - (clientX - box.left)
+    scrollEl.scrollTop = y * ratio - (clientY - box.top)
+  }
+
+  // The zoom the pinch started from, in proportion to how far the fingers
+  // have spread since, within the zoom steps' own range.
+  const pinchTo = (): void => {
+    const [a, b] = [...fingers.values()]
+    if (!pinch || !a || !b) return
+    const spread = Math.hypot(a.x - b.x, a.y - b.y)
+    if (!(spread > 0) || !(pinch.distance > 0)) return
+    const smallest = ZOOM_STEPS[0]
+    const largest = ZOOM_STEPS[ZOOM_STEPS.length - 1]!
+    const next = Math.min(largest, Math.max(smallest, pinch.scale * spread / pinch.distance))
+    zoomAround(next, (a.x + b.x) / 2, (a.y + b.y) / 2)
+  }
+
+  const startDrag = (p: Press, at: { clientX: number; clientY: number }): void => {
     press = null
+    cancelLongPress()
     if (!findRoom(store.state.vault, p.id)) {
       // The pressed room went (a key removed it) before the pointer
       // travelled far enough to carry it.
@@ -428,7 +482,7 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
       resolve: createDropResolver(vault, mode, { id: p.id, grabOffset: p.grabOffset }),
       plan: { kind: 'cancel' },
     }
-    dragPointer = { x: event.clientX, y: event.clientY }
+    dragPointer = { x: at.clientX, y: at.clientY }
     // Captured by the canvas, which paint() never replaces -- not by the
     // room's own element, which the repaint above has just thrown away.
     canvas.setPointerCapture(p.pointerId)
@@ -442,9 +496,18 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     // A stale press from a button that came up somewhere the canvas never
     // heard about must not still be sitting here when a new one starts.
     press = null
-    // Touch keeps scrolling the scene: a finger on a 25-floor vault is far
-    // more often reaching for the floors below than for a room.
-    if (drag || event.button !== 0 || event.pointerType === 'touch') return
+    if (event.pointerType === 'touch') {
+      fingers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (fingers.size === 2) {
+        // A second finger makes it a pinch: whatever the first was about
+        // to pick up, it is not picking up now.
+        cancelLongPress()
+        const [a, b] = [...fingers.values()]
+        pinch = { distance: Math.hypot(a!.x - b!.x, a!.y - b!.y), scale }
+        return
+      }
+    }
+    if (drag || event.button !== 0) return
     const target = event.target as Element
     if (target.closest('[data-delete-room]')) return
     const id = target.closest('[data-movable]')?.getAttribute('data-room-id')
@@ -453,9 +516,26 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     const cell = cellAt(event.clientX, event.clientY)
     const grabOffset = cell ? Math.max(0, Math.min(room.w - 1, cell.x - room.x)) : 0
     press = { pointerId: event.pointerId, id: room.id, clientX: event.clientX, clientY: event.clientY, grabOffset }
+    if (event.pointerType === 'touch') {
+      // A finger has no hover and no second button: resting on the room is
+      // how it says "this one", and then it carries it as a mouse would.
+      const held = press
+      cancelLongPress()
+      longPress = setTimeout(() => {
+        longPress = null
+        if (press === held) startDrag(held, held)
+      }, LONG_PRESS_MS)
+    }
   }
 
   const onPointerMove = (event: PointerEvent): void => {
+    if (fingers.has(event.pointerId)) {
+      fingers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (pinch) {
+        pinchTo()
+        return
+      }
+    }
     if (drag) {
       if (event.pointerId !== drag.pointerId) return
       dragPointer = { x: event.clientX, y: event.clientY }
@@ -469,13 +549,23 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
       return
     }
     const travelled = Math.hypot(event.clientX - press.clientX, event.clientY - press.clientY)
+    if (event.pointerType === 'touch') {
+      // Moving before the long press is up is scrolling, not carrying.
+      if (travelled > LONG_PRESS_SLOP_PX) {
+        press = null
+        cancelLongPress()
+      }
+      return
+    }
     if (travelled >= DRAG_THRESHOLD_PX) startDrag(press, event)
   }
 
   const onPointerUp = (event: PointerEvent): void => {
+    forgetFinger(event.pointerId)
     if (press?.pointerId === event.pointerId) {
       // It never went past the threshold: a click, which onClick will see.
       press = null
+      cancelLongPress()
       return
     }
     if (!drag || event.pointerId !== drag.pointerId) return
@@ -493,8 +583,25 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   }
 
   const onPointerCancel = (event: PointerEvent): void => {
-    if (press?.pointerId === event.pointerId) press = null
+    forgetFinger(event.pointerId)
+    if (press?.pointerId === event.pointerId) {
+      press = null
+      cancelLongPress()
+    }
     if (drag?.pointerId === event.pointerId) endDrag()
+  }
+
+  // A finger resting on a room is a long press here, not a request for the
+  // browser's own menu.
+  const onContextMenu = (event: Event): void => {
+    if (press || drag) event.preventDefault()
+  }
+
+  // A carried room follows the finger, and a pinch is a zoom: the scene must
+  // not scroll out from under either. Passive listeners cannot do this, so
+  // this one is registered as not passive.
+  const onTouchMove = (event: TouchEvent): void => {
+    if (drag || pinch) event.preventDefault()
   }
 
   const onScroll = (): void => {
@@ -692,6 +799,8 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   canvas.addEventListener('pointerup', onPointerUp)
   canvas.addEventListener('pointercancel', onPointerCancel)
   canvas.addEventListener('lostpointercapture', onPointerCancel)
+  canvas.addEventListener('contextmenu', onContextMenu)
+  canvas.addEventListener('touchmove', onTouchMove, { passive: false })
   scrollEl.addEventListener('scroll', onScroll)
   // A fitted grid follows the window; a chosen zoom stays as it was.
   const onResize = (): void => {
@@ -712,6 +821,9 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     canvas.removeEventListener('pointerup', onPointerUp)
     canvas.removeEventListener('pointercancel', onPointerCancel)
     canvas.removeEventListener('lostpointercapture', onPointerCancel)
+    canvas.removeEventListener('contextmenu', onContextMenu)
+    canvas.removeEventListener('touchmove', onTouchMove)
+    cancelLongPress()
     scrollEl.removeEventListener('scroll', onScroll)
     window.removeEventListener('resize', onResize)
     if (pendingFrame !== null) cancelAnimationFrame(pendingFrame)
