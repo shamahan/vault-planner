@@ -325,4 +325,27 @@ describe('reorder', () => {
     )
     expect(reorderPlan(v, 'o', 'd')).toBeNull()
   })
+
+  it('keeps rooms of different levels apart when the shift brings them together', () => {
+    const v = vaultWith(
+      { id: 'd1', type: 'diner', floor: 1, x: 0, w: 3, level: 3 },
+      { id: 'l', type: 'lounge', floor: 1, x: 3, w: 3 },
+      { id: 'd2', type: 'diner', floor: 1, x: 6, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'reorder', id: 'l', with: 'd2' })
+    expect(findRoom(after, 'd1')).toMatchObject({ x: 0, w: 3 })
+    expect(findRoom(after, 'd2')).toMatchObject({ x: 3, w: 3 })
+  })
+
+  it('merges the carried room where it lands, keeping its id', () => {
+    const v = vaultWith(
+      { id: 'd1', type: 'diner', floor: 1, x: 0, w: 3 },
+      { id: 'l', type: 'lounge', floor: 1, x: 3, w: 3 },
+      { id: 'a', type: 'diner', floor: 1, x: 6, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'reorder', id: 'a', with: 'l' })
+    expect(findRoom(after, 'a')).toMatchObject({ x: 0, w: 6 })
+    expect(findRoom(after, 'd1')).toBeUndefined()
+    expect(findRoom(after, 'l')).toMatchObject({ x: 6 })
+  })
 })

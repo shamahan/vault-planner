@@ -161,7 +161,7 @@ test('arming a room leaves the palette scrolled where it was', async ({ page }) 
     .toBe(visible.scrollTop)
 })
 
-test('drag a room onto another to swap them, then onto free cells to move it', async ({ page }) => {
+test('drag a room onto its neighbour in the row, then onto free cells to move it', async ({ page }) => {
   await page.goto('./')
 
   const scene = page.locator('.scene > svg')
@@ -204,7 +204,8 @@ test('drag a room onto another to swap them, then onto free cells to move it', a
   await page.keyboard.press('Escape')
   await expect(page.locator('[data-room-id]')).toHaveCount(5)
 
-  // The diner onto the living room: the same width, so they trade places.
+  // The diner onto the living room beside it: one row, so the diner takes
+  // its place and the living room shifts along.
   await dragFromTo(await cell(0, 11), await cell(0, 14))
   const diner = await room('Diner').boundingBox()
   const living = await room('Living Room').boundingBox()

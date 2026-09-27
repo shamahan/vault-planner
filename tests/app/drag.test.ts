@@ -279,5 +279,17 @@ describe('createDropResolver', () => {
         expect(plan.verdict.reason).toBe('These two rooms are the same; swapping them would change nothing.')
       }
     })
+
+    it('refuses in strict mode a reorder that takes an elevator out of its shaft, drawing both ghosts', () => {
+      const v = vaultWith(
+        { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+        { id: 'd0', type: 'diner', floor: 0, x: 10, w: 3 },
+        { id: 'e1', type: 'elevator', floor: 1, x: 9, w: 1 },
+        { id: 'g1', type: 'garden', floor: 1, x: 10, w: 3 },
+      )
+      const plan = createDropResolver(v, 'strict', { id: 'd0', grabOffset: 0 })({ floor: 0, x: 9 })
+      expect(plan).toMatchObject({ kind: 'refuse', ghost: { floor: 0, x: 9, w: 3 }, swapGhost: { floor: 0, x: 12, w: 1 } })
+      if (plan.kind === 'refuse') expect(plan.verdict.reason).toBe('That would leave 2 rooms with no route to the vault door.')
+    })
   })
 })
