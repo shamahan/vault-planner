@@ -17,6 +17,12 @@ export const COLORS = {
   background: '#0e1412',
   floor: '#0f1613',
   line: '#202b26',
+  /**
+   * The boundaries between cells on a floor: a step above the floor, well
+   * below its outline, so the 26 cells read as slots without the grid
+   * turning into a mesh.
+   */
+  cell: '#18221e',
   text: '#dce5e0',
   dim: '#7e8e87',
   faint: '#5d6c66',

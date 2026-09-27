@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { createVault, type Vault } from '../../src/domain/vault'
-import { mergeRuns, renderScene } from '../../src/render/scene'
+import { mergeRuns, renderScene, subtractRuns } from '../../src/render/scene'
 import { GLYPH_PATHS } from '../../src/render/icons'
+import { COLORS } from '../../src/render/theme'
 import { ROOM_KINDS } from '../../src/domain/catalog'
 import { FLOOR_COUNT } from '../../src/domain/grid'
 
@@ -104,6 +105,47 @@ describe('scene', () => {
     const v = sample()
     v.rooms.find((r) => r.id === 'l0')!.level = 3
     expect(renderScene(v)).toMatch(/data-room-id="l0"[^>]*><title>Living Room, level 3<\/title>/)
+  })
+
+  it('takes the covered cells out of a run, leaving what is left on either side', () => {
+    expect(subtractRuns([{ x: 0, w: 10 }], [{ x: 3, w: 2 }])).toEqual([{ x: 0, w: 3 }, { x: 5, w: 5 }])
+    expect(subtractRuns([{ x: 0, w: 3 }], [{ x: 5, w: 2 }])).toEqual([{ x: 0, w: 3 }])
+    expect(subtractRuns([{ x: 4, w: 3 }], [{ x: 0, w: 10 }])).toEqual([])
+    expect(subtractRuns([{ x: 0, w: 6 }, { x: 10, w: 4 }], [{ x: 4, w: 7 }]))
+      .toEqual([{ x: 0, w: 4 }, { x: 11, w: 3 }])
+  })
+
+  it('draws the free-only tier dimly, and never under a lit strip', () => {
+    const svg = renderScene(sample(), {
+      candidates: [{ floor: 2, x: 4, w: 3 }],
+      freeOnly: [{ floor: 2, x: 0, w: 3 }, { floor: 2, x: 3, w: 3 }, { floor: 2, x: 10, w: 3 }],
+    })
+    const dim = [...svg.matchAll(/<g data-candidate="free-only"[^>]*>(.*?)<\/g>/g)]
+    expect(dim).toHaveLength(2)
+    // Cells 0-3 (the lit strip starts at 4) and 10-12.
+    expect(dim[0]![0]).toContain(`width="${4 * 22 - 2}"`)
+    expect(dim[1]![0]).toContain(`width="${3 * 22 - 2}"`)
+    for (const [group, inner] of dim) {
+      expect(group).toContain('pointer-events="none"')
+      expect(inner!.match(/<rect/g)).toHaveLength(1)
+    }
+    expect(svg.match(/data-candidate="true"/g)).toHaveLength(1)
+  })
+
+  it('draws the cell boundaries on every floor', () => {
+    const svg = renderScene(sample())
+    expect(svg).toContain('<pattern id="cells"')
+    expect(svg.match(/fill="url\(#cells\)"/g)).toHaveLength(FLOOR_COUNT)
+  })
+
+  it('lays the floor colour under each room, so the cell lines stay out of it', () => {
+    // First thing after the title, under the room's own translucent tint.
+    // (Not just "somewhere in the room's markup": the last room's slice runs
+    // on over the empty floors below it, which are floor-coloured too.)
+    const svg = renderScene(sample())
+    for (const id of ['door', 'e0', 'l0', 'g1']) {
+      expect(svg, id).toMatch(new RegExp(`data-room-id="${id}"[^>]*><title>[^<]*</title><rect [^>]*fill="${COLORS.floor}"/>`))
+    }
   })
 
   it('draws no candidate marks when none are given', () => {

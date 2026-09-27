@@ -39,6 +39,14 @@ export type SceneOptions = {
    * this, so an exported picture never has it in it.
    */
   candidates?: Array<{ floor: number; x: number; w: number }>
+  /**
+   * Under Free rules, the spots where the armed or carried room merely
+   * fits: accepted by Free rules, but with no route to the vault door, so
+   * Strict would refuse them. Drawn dimmer than `candidates` (which, under
+   * either rules, are the spots that do keep a route) and never over them.
+   * Omit it, like `candidates`, when there is nothing to show.
+   */
+  freeOnly?: Array<{ floor: number; x: number; w: number }>
 }
 
 const PAD = SCENE_PAD_PX
@@ -81,6 +89,9 @@ function roomGroup(room: Room, opts: SceneOptions, top: number): string {
   const title = kind.maxLevel > 1 ? `${kind.name}, level ${level}` : kind.name
   const body: string[] = [
     `<title>${escapeText(title)}</title>`,
+    // The room's tint is translucent; the floor colour under it keeps the
+    // cell boundaries drawn on the floor from showing through the room.
+    `<rect width="${w}" height="${h}" rx="3" fill="${COLORS.floor}"/>`,
     `<rect width="${w}" height="${h}" rx="3" fill="${tint(stroke, 0.13)}" ` +
     `stroke="${stroke}" stroke-width="1"${blamed ? ' stroke-dasharray="3 3"' : ''}/>`,
   ]
@@ -175,6 +186,35 @@ export function mergeRuns(spans: Array<{ x: number; w: number }>): Array<{ x: nu
 }
 
 /**
+ * `runs` with every cell that `cover` covers taken out -- what is left of
+ * each run on either side of each cover. Pure and exported so it can be
+ * tested on its own. The free-only tier is drawn through this against the
+ * lit one, so a cell some connected footprint covers is lit and nothing
+ * else, even where a free-only footprint also reaches it.
+ */
+export function subtractRuns(
+  runs: Array<{ x: number; w: number }>,
+  cover: Array<{ x: number; w: number }>,
+): Array<{ x: number; w: number }> {
+  const out: Array<{ x: number; w: number }> = []
+  for (const run of runs) {
+    let pieces = [run]
+    for (const c of cover) {
+      pieces = pieces.flatMap((p) => {
+        const end = p.x + p.w
+        const cEnd = c.x + c.w
+        if (cEnd <= p.x || c.x >= end) return [p]
+        const left = c.x > p.x ? [{ x: p.x, w: c.x - p.x }] : []
+        const right = cEnd < end ? [{ x: cEnd, w: end - cEnd }] : []
+        return [...left, ...right]
+      })
+    }
+    out.push(...pieces)
+  }
+  return out.sort((a, b) => a.x - b.x)
+}
+
+/**
  * A merged run of legal territory for the armed room type -- illuminated
  * ground, not an outlined box. Candidates used to be drawn as room-sized
  * dashed rectangles, which is the exact vocabulary roomGroup uses for a
@@ -202,6 +242,40 @@ function candidateRun(run: { x: number; w: number }, top: number): string {
     `<rect x="${x + 1}" y="${top + 3}" width="${w}" height="${h}" fill="${tint(COLORS.selection, 0.1)}"/>` +
     `<rect x="${x + 1}" y="${top + 3 + h - barH}" width="${w}" height="${barH}" fill="${COLORS.selection}"/>` +
     `</g>`
+  )
+}
+
+/**
+ * A run of the free-only tier: the same ground candidateRun lights, only
+ * dimmer and with no accent bar -- the bar is what says "this keeps a
+ * route to the door", and these spots do not. No data-room-id and no
+ * pointer events, for the same reasons as candidateRun.
+ */
+function freeOnlyRun(run: { x: number; w: number }, top: number): string {
+  const x = GUTTER + run.x * CELL_PX
+  const w = run.w * CELL_PX - 2
+  const h = FLOOR_PX - 6
+  return (
+    `<g data-candidate="free-only" pointer-events="none">` +
+    `<rect x="${x + 1}" y="${top + 3}" width="${w}" height="${h}" fill="${tint(COLORS.selection, 0.05)}"/>` +
+    `</g>`
+  )
+}
+
+/**
+ * The floor fill, tiled a cell at a time from the grid's left edge: the
+ * floor colour with a 1px boundary down its right-hand side. In user space
+ * so every floor lines up with the same cells; the boundary falls in the
+ * 1px gap roomGroup leaves either side of a room, and rooms lay the floor
+ * colour under themselves, so the lines show only on empty ground.
+ */
+function cellPattern(): string {
+  return (
+    `<defs><pattern id="cells" x="${GUTTER}" y="0" width="${CELL_PX}" height="${FLOOR_PX}" ` +
+    `patternUnits="userSpaceOnUse">` +
+    `<rect width="${CELL_PX}" height="${FLOOR_PX}" fill="${COLORS.floor}"/>` +
+    `<rect x="${CELL_PX - 1}" width="1" height="${FLOOR_PX}" fill="${COLORS.cell}"/>` +
+    `</pattern></defs>`
   )
 }
 
@@ -291,6 +365,7 @@ export function renderScene(v: Vault, opts: SceneOptions = {}): string {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
     `viewBox="0 0 ${width} ${height}" font-family="${FONT_STACK}">`,
     glyphDefs(),
+    cellPattern(),
     `<rect width="${width}" height="${height}" fill="${COLORS.background}"/>`,
   ]
 
@@ -308,14 +383,15 @@ export function renderScene(v: Vault, opts: SceneOptions = {}): string {
       `<text x="${GUTTER - 10}" y="${top + FLOOR_PX / 2 + 4}" text-anchor="end" font-size="11" ` +
       `fill="${COLORS.faint}">${floorLabel(floor)}</text>`,
       `<rect x="${GUTTER}" y="${top}" width="${gridWidth}" height="${FLOOR_PX}" rx="3" ` +
-      `fill="${COLORS.floor}" stroke="${COLORS.line}"/>`,
+      `fill="url(#cells)" stroke="${COLORS.line}"/>`,
     )
-    const spans = (opts.candidates ?? [])
-      .filter((c) => c.floor === floor)
-      .map((c) => ({ x: c.x, w: c.w }))
-    for (const run of mergeRuns(spans)) {
-      parts.push(candidateRun(run, top))
+    const onFloor = (spots?: Array<{ floor: number; x: number; w: number }>) =>
+      (spots ?? []).filter((c) => c.floor === floor).map((c) => ({ x: c.x, w: c.w }))
+    const lit = mergeRuns(onFloor(opts.candidates))
+    for (const run of subtractRuns(mergeRuns(onFloor(opts.freeOnly)), lit)) {
+      parts.push(freeOnlyRun(run, top))
     }
+    for (const run of lit) parts.push(candidateRun(run, top))
     for (const room of v.rooms.filter((r) => r.floor === floor)) {
       parts.push(roomGroup(room, opts, top))
     }
