@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyOp, createVault, findRoom, roomsOnFloor, type Vault } from '../../src/domain/vault'
+import { applyOp, createVault, findRoom, levelOf, roomsOnFloor, type Vault } from '../../src/domain/vault'
 
 function vaultWith(...rooms: Vault['rooms']): Vault {
   const v = createVault()
@@ -169,5 +169,69 @@ describe('swap', () => {
     applyOp(v, { kind: 'swap', id: 'a', with: 'b', x: 4 })
     expect(findRoom(v, 'a')).toMatchObject({ floor: 0, x: 10 })
     expect(findRoom(v, 'b')).toMatchObject({ floor: 1, x: 4 })
+  })
+})
+
+describe('operations: room levels', () => {
+  it('builds a new room at level 1', () => {
+    const v = applyOp(createVault(), { kind: 'place', type: 'diner', floor: 0, x: 9 })
+    const placed = roomsOnFloor(v, 0).find((r) => r.type === 'diner')!
+    expect(levelOf(placed)).toBe(1)
+  })
+
+  it('does not merge a new room into a neighbour of another level', () => {
+    const v = vaultWith({ id: 'a', type: 'diner', floor: 0, x: 9, w: 3, level: 3 })
+    const after = applyOp(v, { kind: 'place', type: 'diner', floor: 0, x: 12 })
+    const diners = roomsOnFloor(after, 0).filter((r) => r.type === 'diner')
+    expect(diners).toHaveLength(2)
+  })
+
+  it('sets the level of the whole room', () => {
+    const v = vaultWith({ id: 'a', type: 'diner', floor: 0, x: 9, w: 6 })
+    const after = applyOp(v, { kind: 'level', id: 'a', level: 2 })
+    expect(findRoom(after, 'a')).toMatchObject({ x: 9, w: 6, level: 2 })
+  })
+
+  it('merges a raised room into a neighbour that is already at that level', () => {
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 0, x: 9, w: 3 },
+      { id: 'b', type: 'diner', floor: 0, x: 12, w: 3, level: 3 },
+    )
+    const after = applyOp(v, { kind: 'level', id: 'a', level: 3 })
+    const diners = roomsOnFloor(after, 0).filter((r) => r.type === 'diner')
+    expect(diners).toHaveLength(1)
+    expect(diners[0]).toMatchObject({ id: 'a', x: 9, w: 6, level: 3 })
+  })
+
+  it('merges a lowered room the same way', () => {
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 0, x: 9, w: 3, level: 3 },
+      { id: 'b', type: 'diner', floor: 0, x: 12, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'level', id: 'a', level: 1 })
+    const diners = roomsOnFloor(after, 0).filter((r) => r.type === 'diner')
+    expect(diners).toHaveLength(1)
+    expect(diners[0]).toMatchObject({ x: 9, w: 6 })
+    expect(levelOf(diners[0]!)).toBe(1)
+  })
+
+  it('leaves a level-matched neighbour alone when the merge would outgrow the cap', () => {
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 0, x: 9, w: 9, level: 3 },
+      { id: 'b', type: 'diner', floor: 0, x: 18, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'level', id: 'b', level: 3 })
+    const diners = roomsOnFloor(after, 0).filter((r) => r.type === 'diner')
+    expect(diners).toHaveLength(2)
+    expect(findRoom(after, 'b')).toMatchObject({ x: 18, w: 3, level: 3 })
+  })
+
+  it('does not merge a moved room into a neighbour of another level', () => {
+    const v = vaultWith(
+      { id: 'a', type: 'diner', floor: 0, x: 9, w: 3, level: 2 },
+      { id: 'b', type: 'diner', floor: 1, x: 12, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'move', id: 'b', floor: 0, x: 12 })
+    expect(roomsOnFloor(after, 0).filter((r) => r.type === 'diner')).toHaveLength(2)
   })
 })

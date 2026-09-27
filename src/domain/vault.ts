@@ -66,6 +66,7 @@ export type Op =
   | { kind: 'move'; id: RoomId; floor: number; x: number }
   | { kind: 'swap'; id: RoomId; with: RoomId; x: number }
   | { kind: 'split'; id: RoomId }
+  | { kind: 'level'; id: RoomId; level: Level }
   | { kind: 'rename'; name: string }
 
 function clone(v: Vault): Vault {
@@ -73,9 +74,11 @@ function clone(v: Vault): Vault {
 }
 
 /**
- * Absorbs the same-type rooms that touch `seed` into it, left and right,
- * up to `baseWidth * maxMerge`. A neighbour that would push the group past
- * that limit is left standing on its own: in the real game a fourth room
+ * Absorbs the rooms that touch `seed` and match it in type and level into
+ * it, left and right, up to `baseWidth * maxMerge`. Level is part of the
+ * match because it is in the game: a new level-1 room beside a level-3 one
+ * stays on its own until it is upgraded to 3. A neighbour that would push
+ * the group past that limit is left standing on its own: in the real game a fourth room
  * beside an already-full group of three does not refuse to be placed, it
  * simply does not join a group that has no room left in it. The `bad-width`
  * rule in validate.ts still exists, but only to catch a record that is
@@ -96,6 +99,7 @@ function mergeNeighbours(rooms: Room[], seed: Room): Room[] {
     for (const r of rooms) {
       if (absorbed.has(r.id)) continue
       if (r.floor !== group.floor || r.type !== group.type) continue
+      if (levelOf(r) !== levelOf(group)) continue
       if (!touches(group, r)) continue
       if (group.w + r.w > limit) continue
       group = { ...group, x: Math.min(group.x, r.x), w: group.w + r.w }
@@ -196,6 +200,14 @@ export function applyOp(v: Vault, op: Op): Vault {
       // then there is no B left to merge.
       const survivor = next.rooms.find((r) => r.id === op.with)
       if (survivor) next.rooms = mergeNeighbours(next.rooms, survivor)
+      return next
+    }
+
+    case 'level': {
+      const room = next.rooms.find((r) => r.id === op.id)
+      if (!room) return next
+      room.level = op.level
+      next.rooms = mergeNeighbours(next.rooms, room)
       return next
     }
 
