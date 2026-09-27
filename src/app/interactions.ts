@@ -6,6 +6,7 @@ import { renderScene } from '../render/scene'
 import { CELL_PX, COLORS, FLOOR_GAP_PX, FLOOR_PX, SCENE_GUTTER_PX, SCENE_PAD_PX } from '../render/theme'
 import { confirmCascade } from './dialogs'
 import { createDropResolver, type DropPlan, type Ghost } from './drag'
+import { highlightFor, type Highlight, type Spot } from './highlight'
 import type { Store } from './state'
 
 export function describeRefusal(verdict: Verdict): string {
@@ -55,8 +56,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
     (target instanceof HTMLElement && target.isContentEditable)
   )
 }
-
-type Candidate = { floor: number; x: number; w: number }
 
 /**
  * Holds a room's left edge inside the floor it would be placed on, so a
@@ -142,47 +141,47 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   const refusalEl = canvas.querySelector<HTMLElement>('[data-refusal]')!
   const scrollEl = canvas.querySelector<HTMLElement>('.scene-scroll')!
 
-  // Every position the armed tool could legally occupy is 25 floors * 26
-  // cells = 650 canApply calls, each of which clones the vault and walks
-  // the reachability graph -- and paint() below runs on every store emit,
-  // including a plain selection change that touches neither the vault nor
-  // the tool. applyOp always hands back a new Vault object on an accepted
-  // change (see vault.ts's `clone`), so `===` on the vault is a sound
-  // "did anything this depends on change" signal: this cache keys on the
-  // vault object, the armed tool and the mode, and recomputes only when one
-  // of those three no longer matches what it last saw.
-  let candidateCache: { vault: Vault; tool: string; mode: Mode; candidates: Candidate[] } | null = null
+  // Where the armed tool could go is 25 floors * 26 cells of canApply
+  // calls, each of which clones the vault and walks the reachability graph
+  // -- and paint() below runs on every store emit, including a plain
+  // selection change that touches neither the vault nor the tool. applyOp
+  // always hands back a new Vault object on an accepted change (see
+  // vault.ts's `clone`), so `===` on the vault is a sound "did anything this
+  // depends on change" signal: this cache keys on the vault object, the
+  // armed tool and the mode, and recomputes only when one of those three no
+  // longer matches what it last saw.
+  let placementCache: { vault: Vault; tool: string; mode: Mode; highlight: Highlight; accepted: Spot[] } | null = null
 
-  const candidatesFor = (vault: Vault, tool: string, mode: Mode): Candidate[] => {
-    if (
-      candidateCache &&
-      candidateCache.vault === vault &&
-      candidateCache.tool === tool &&
-      candidateCache.mode === mode
-    ) {
-      return candidateCache.candidates
+  const placementFor = (vault: Vault, tool: string, mode: Mode) => {
+    if (placementCache && placementCache.vault === vault && placementCache.tool === tool && placementCache.mode === mode) {
+      return placementCache
     }
-    const w = kindOf(tool).baseWidth
-    const candidates: Candidate[] = []
-    for (let floor = 0; floor < FLOOR_COUNT; floor++) {
-      for (let x = 0; x < CELLS_PER_FLOOR; x++) {
-        if (canApply(vault, { kind: 'place', type: tool, floor, x }, mode).ok) {
-          candidates.push({ floor, x, w })
-        }
-      }
-    }
-    candidateCache = { vault, tool, mode, candidates }
-    return candidates
+    const highlight = highlightFor(vault, mode, kindOf(tool).baseWidth, (floor, x) => ({ kind: 'place', type: tool, floor, x }))
+    placementCache = { vault, tool, mode, highlight, accepted: highlight.connected.concat(highlight.freeOnly) }
+    return placementCache
   }
+
+  // Every spot the current rules accept, both tiers: what the ghost and the
+  // click snap to. Only the drawing tells the tiers apart.
+  const candidatesFor = (vault: Vault, tool: string, mode: Mode): Spot[] => placementFor(vault, tool, mode).accepted
+
+  // While a room is carried, the spots it could be dropped on -- worked out
+  // once when the drag starts, since the vault cannot change mid-drag.
+  let dragHighlight: Highlight | null = null
 
   const paint = () => {
     const { vault, selection, tool, mode } = store.state
-    const candidates = tool ? candidatesFor(vault, tool, mode) : undefined
+    const highlight = dragHighlight ?? (tool ? placementFor(vault, tool, mode).highlight : null)
     // Only .scene's own markup is replaced -- .scene-scroll (its parent,
     // the thing that actually scrolls) and .refusal (its sibling; see the
     // mountCanvas comment on why .refusal must stay outside .scene-scroll)
     // are never touched, so neither loses state across a repaint.
-    sceneEl.innerHTML = renderScene(vault, { problems: validate(vault), selection, candidates })
+    sceneEl.innerHTML = renderScene(vault, {
+      problems: validate(vault),
+      selection,
+      candidates: highlight?.connected,
+      freeOnly: highlight?.freeOnly,
+    })
     // Any refusal shown for a previous action no longer applies once the
     // scene it was about has just been repainted; say() below sets a fresh
     // one when this repaint itself follows a refusal.

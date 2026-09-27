@@ -363,6 +363,23 @@ describe('candidate highlighting', () => {
     store.setTool(null)
     expect(candidateMarks(canvas)).toHaveLength(0)
   })
+
+  it('lights only the connected spots under Strict rules', () => {
+    const { canvas, store } = mount()
+    store.setTool('diner')
+    expect(canvas.querySelectorAll('g[data-candidate="true"]')).toHaveLength(1)
+    expect(canvas.querySelectorAll('g[data-candidate="free-only"]')).toHaveLength(0)
+  })
+
+  it('adds the dim tier under Free rules, where the room only fits', () => {
+    const { canvas, store } = mount()
+    store.setMode('free')
+    store.setTool('diner')
+    // The one connected strip is beside the door; the top floor is dim
+    // past it, and each of the other 24 floors is one dim run end to end.
+    expect(canvas.querySelectorAll('g[data-candidate="true"]')).toHaveLength(1)
+    expect(canvas.querySelectorAll('g[data-candidate="free-only"]')).toHaveLength(25)
+  })
 })
 
 describe('scroll position', () => {
