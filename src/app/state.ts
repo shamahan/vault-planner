@@ -138,10 +138,11 @@ export class Store {
     // Written synchronously, with no debounce: every accepted op is one
     // JSON.stringify plus one setItem, so a reload right after an edit never
     // loses it. The design called for a debounce to protect against a
-    // per-frame drag flooding localStorage, but this build has no drag --
-    // edits arrive one discrete operation at a time -- so there is nothing
-    // to coalesce, and a trailing timer would only be a live handle this
-    // Store has no dispose method to clear.
+    // per-frame drag flooding localStorage, but a drag here commits nothing
+    // until it is let go -- the frames in between only move its ghosts --
+    // so edits still arrive one discrete operation at a time, there is
+    // nothing to coalesce, and a trailing timer would only be a live handle
+    // this Store has no dispose method to clear.
     try {
       localStorage.setItem(STORAGE_KEY_VAULT, serializeVault(this.current.vault))
     } catch { /* quota or private mode: losing the autosave beats crashing */ }

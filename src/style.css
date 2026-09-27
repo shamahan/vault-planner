@@ -73,6 +73,15 @@ body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
   padding: 10px 14px; background: #182220; border: 1px solid #2b3831; border-radius: 7px;
   font-size: 13px; color: #6c7b75; pointer-events: none; }
 .refusal:empty { display: none; }
+/* Dragging a room (src/app/interactions.ts). Room labels are drawn text,
+   and a press-and-drag across them would otherwise select it. The open
+   hand marks what can be picked up -- never the vault door, which the
+   scene leaves unmarked -- and .dragging holds the closed hand everywhere
+   while a room is carried. */
+.scene { -webkit-user-select: none; user-select: none; }
+.scene [data-movable] { cursor: grab; }
+.canvas.dragging, .canvas.dragging * { cursor: grabbing; }
+.scene [data-dragging] { opacity: .35; }
 .palette h2, .problems h2 { font-size: 10px; letter-spacing: .14em; color: #86968f;
   padding: 14px 16px 8px; margin: 0; font-family: ui-monospace, monospace; }
 .palette h3 { font-size: 10px; letter-spacing: .12em; margin: 12px 0 6px 16px;

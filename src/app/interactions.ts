@@ -5,6 +5,7 @@ import { findRoom, type Op, type Vault } from '../domain/vault'
 import { renderScene } from '../render/scene'
 import { CELL_PX, COLORS, FLOOR_GAP_PX, FLOOR_PX, SCENE_GUTTER_PX, SCENE_PAD_PX } from '../render/theme'
 import { confirmCascade } from './dialogs'
+import { createDropResolver, type DropPlan, type Ghost } from './drag'
 import type { Store } from './state'
 
 export function describeRefusal(verdict: Verdict): string {
@@ -120,6 +121,9 @@ export function resolvePlacement(candidatesOnFloor: { x: number; w: number }[], 
   return resolved
 }
 
+/** How far a press on a room may travel, in page pixels, and still be a click. */
+const DRAG_THRESHOLD_PX = 4
+
 /** Returns a disposer: removes every listener this call added and unsubscribes from the store. */
 export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   // Build the DOM skeleton once, rather than inside paint(). .scene-scroll
@@ -136,6 +140,7 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     '<p class="refusal" data-refusal></p>'
   const sceneEl = canvas.querySelector<HTMLElement>('[data-cell-target]')!
   const refusalEl = canvas.querySelector<HTMLElement>('[data-refusal]')!
+  const scrollEl = canvas.querySelector<HTMLElement>('.scene-scroll')!
 
   // Every position the armed tool could legally occupy is 25 floors * 26
   // cells = 650 canApply calls, each of which clones the vault and walks
@@ -188,6 +193,28 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     refusalEl.textContent = describeRefusal(verdict)
   }
 
+  // The floor/cell under a point on the page, or null off the grid. Reads
+  // the svg afresh each time: paint() replaces it on every store emit.
+  const cellAt = (clientX: number, clientY: number): { floor: number; x: number } | null => {
+    const svg = canvas.querySelector('svg')
+    if (!svg) return null
+    return cellFromPoint(svg.getBoundingClientRect(), svg.viewBox.baseVal.width, clientX, clientY)
+  }
+
+  // Reveals a ghost slot over the footprint `at`, in the same geometry
+  // scene.ts's roomGroup uses for a room at that floor/x/w, so a ghost lines
+  // up exactly with where the room would actually land.
+  const showGhost = (el: SVGRectElement | null, at: Ghost, stroke: string): void => {
+    if (!el) return
+    const top = SCENE_PAD_PX + at.floor * (FLOOR_PX + FLOOR_GAP_PX)
+    el.setAttribute('x', String(SCENE_GUTTER_PX + at.x * CELL_PX + 1))
+    el.setAttribute('y', String(top + 3))
+    el.setAttribute('width', String(at.w * CELL_PX - 2))
+    el.setAttribute('height', String(FLOOR_PX - 6))
+    el.setAttribute('stroke', stroke)
+    el.setAttribute('visibility', 'visible')
+  }
+
   // The hover ghost -- a room-sized outline that follows the cursor while a
   // tool is armed, green if `canApply` would accept a placement there and
   // red if it would not (see the design doc, §8). paint() rebuilds the
@@ -237,19 +264,11 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     const onFloor = candidatesFor(vault, tool, mode).filter((c) => c.floor === floor)
     const x = resolvePlacement(onFloor, clampedX)
     const verdict = canApply(vault, { kind: 'place', type: tool, floor, x }, mode)
-    const top = SCENE_PAD_PX + floor * (FLOOR_PX + FLOOR_GAP_PX)
-    // Same geometry scene.ts's roomGroup/candidateMark use for a footprint
-    // at this floor/x/w, so the ghost lines up exactly with where the room
-    // would actually land.
-    ghost.setAttribute('x', String(SCENE_GUTTER_PX + x * CELL_PX + 1))
-    ghost.setAttribute('y', String(top + 3))
-    ghost.setAttribute('width', String(w * CELL_PX - 2))
-    ghost.setAttribute('height', String(FLOOR_PX - 6))
-    ghost.setAttribute('stroke', verdict.ok ? COLORS.accepted : COLORS.problem)
-    ghost.setAttribute('visibility', 'visible')
+    showGhost(ghost, { floor, x, w }, verdict.ok ? COLORS.accepted : COLORS.problem)
   }
 
   const onMouseMove = (event: MouseEvent): void => {
+    if (drag) return
     if (!store.state.tool) {
       hideGhost()
       return
@@ -261,12 +280,164 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   }
 
   const onMouseLeave = (): void => {
+    if (drag) return
     lastPointer = null
     if (pendingFrame !== null) {
       cancelAnimationFrame(pendingFrame)
       pendingFrame = null
     }
     hideGhost()
+  }
+
+  // Dragging a room -- see docs/superpowers/specs/2026-09-27-room-drag-swap-design.md.
+  // A press on a movable room is only a candidate until the pointer has
+  // travelled DRAG_THRESHOLD_PX: short of that it is a click, and onClick
+  // handles it as one. Past it the room is being carried: each frame asks
+  // the drop resolver what letting go there would do and draws the answer
+  // as the ghosts, and letting go does exactly what the last frame drew.
+  type Press = { pointerId: number; id: string; clientX: number; clientY: number; grabOffset: number }
+  type Drag = { pointerId: number; resolve: (cell: { floor: number; x: number } | null) => DropPlan; plan: DropPlan }
+  let press: Press | null = null
+  let drag: Drag | null = null
+  let dragPointer: { x: number; y: number } | null = null
+  let dragFrame: number | null = null
+  // The click a browser fires after the pointerup that ends a drag is not a
+  // click on anything: left alone it would select or deselect whatever the
+  // room was dropped on. The next pointerdown clears the flag, so a drag
+  // let go where no click follows cannot eat the next real click.
+  let swallowClick = false
+
+  const markDragged = (id: string | null): void => {
+    for (const el of canvas.querySelectorAll('[data-room-id]')) {
+      el.toggleAttribute('data-dragging', el.getAttribute('data-room-id') === id)
+    }
+  }
+
+  const hideDragGhosts = (): void => {
+    canvas.querySelector('[data-ghost]')?.setAttribute('visibility', 'hidden')
+    canvas.querySelector('[data-ghost-swap]')?.setAttribute('visibility', 'hidden')
+  }
+
+  const drawDrag = (): void => {
+    dragFrame = null
+    if (!drag || !dragPointer) return
+    const plan = drag.resolve(cellAt(dragPointer.x, dragPointer.y))
+    drag.plan = plan
+    if (plan.kind === 'cancel') {
+      hideDragGhosts()
+      return
+    }
+    const stroke = plan.kind === 'refuse' ? COLORS.problem : COLORS.accepted
+    showGhost(canvas.querySelector<SVGRectElement>('[data-ghost]'), plan.ghost, stroke)
+    const swapGhost = canvas.querySelector<SVGRectElement>('[data-ghost-swap]')
+    if (plan.kind !== 'stay' && plan.swapGhost) showGhost(swapGhost, plan.swapGhost, stroke)
+    else swapGhost?.setAttribute('visibility', 'hidden')
+  }
+
+  const scheduleDragFrame = (): void => {
+    if (dragFrame === null) dragFrame = requestAnimationFrame(drawDrag)
+  }
+
+  const endDrag = (): void => {
+    const ended = drag
+    if (!ended) return
+    // Cleared first: releasing capture fires lostpointercapture, which must
+    // find no drag left to end.
+    drag = null
+    dragPointer = null
+    if (dragFrame !== null) {
+      cancelAnimationFrame(dragFrame)
+      dragFrame = null
+    }
+    if (canvas.hasPointerCapture(ended.pointerId)) canvas.releasePointerCapture(ended.pointerId)
+    markDragged(null)
+    hideDragGhosts()
+    canvas.classList.remove('dragging')
+    swallowClick = true
+  }
+
+  const startDrag = (p: Press, event: PointerEvent): void => {
+    press = null
+    if (pendingFrame !== null) {
+      // A hover-ghost frame queued while a palette room was armed would
+      // otherwise land after this one and hide the drag's ghost.
+      cancelAnimationFrame(pendingFrame)
+      pendingFrame = null
+    }
+    // Taking hold of a room selects it, and selecting puts an armed palette
+    // room down -- the same as clicking a room with one armed. The repaint
+    // this triggers happens now, before any ghost is drawn into it.
+    store.select(p.id)
+    const { vault, mode } = store.state
+    drag = {
+      pointerId: p.pointerId,
+      resolve: createDropResolver(vault, mode, { id: p.id, grabOffset: p.grabOffset }),
+      plan: { kind: 'cancel' },
+    }
+    dragPointer = { x: event.clientX, y: event.clientY }
+    // Captured by the canvas, which paint() never replaces -- not by the
+    // room's own element, which the repaint above has just thrown away.
+    canvas.setPointerCapture(p.pointerId)
+    canvas.classList.add('dragging')
+    markDragged(p.id)
+    scheduleDragFrame()
+  }
+
+  const onPointerDown = (event: PointerEvent): void => {
+    swallowClick = false
+    // Touch keeps scrolling the scene: a finger on a 25-floor vault is far
+    // more often reaching for the floors below than for a room.
+    if (drag || event.button !== 0 || event.pointerType === 'touch') return
+    const target = event.target as Element
+    if (target.closest('[data-delete-room]')) return
+    const id = target.closest('[data-movable]')?.getAttribute('data-room-id')
+    const room = id ? findRoom(store.state.vault, id) : undefined
+    if (!room) return
+    const cell = cellAt(event.clientX, event.clientY)
+    const grabOffset = cell ? Math.max(0, Math.min(room.w - 1, cell.x - room.x)) : 0
+    press = { pointerId: event.pointerId, id: room.id, clientX: event.clientX, clientY: event.clientY, grabOffset }
+  }
+
+  const onPointerMove = (event: PointerEvent): void => {
+    if (drag) {
+      if (event.pointerId !== drag.pointerId) return
+      dragPointer = { x: event.clientX, y: event.clientY }
+      scheduleDragFrame()
+      return
+    }
+    if (!press || event.pointerId !== press.pointerId) return
+    const travelled = Math.hypot(event.clientX - press.clientX, event.clientY - press.clientY)
+    if (travelled >= DRAG_THRESHOLD_PX) startDrag(press, event)
+  }
+
+  const onPointerUp = (event: PointerEvent): void => {
+    if (press?.pointerId === event.pointerId) {
+      // It never went past the threshold: a click, which onClick will see.
+      press = null
+      return
+    }
+    if (!drag || event.pointerId !== drag.pointerId) return
+    // Resolve the spot the pointer actually let go of, now, rather than act
+    // on a frame that may be a move behind it: what happens is what the
+    // ghost shows for this exact spot.
+    dragPointer = { x: event.clientX, y: event.clientY }
+    if (dragFrame !== null) cancelAnimationFrame(dragFrame)
+    drawDrag()
+    const plan = drag.plan
+    endDrag()
+    if (plan.kind === 'run') say(store.run(plan.op))
+    else if (plan.kind === 'refuse') say(plan.verdict)
+    else say({ ok: true })
+  }
+
+  const onPointerCancel = (event: PointerEvent): void => {
+    if (press?.pointerId === event.pointerId) press = null
+    if (drag?.pointerId === event.pointerId) endDrag()
+  }
+
+  const onScroll = (): void => {
+    // The pointer has not moved, but the grid under it has.
+    if (drag) scheduleDragFrame()
   }
 
   const removeRoom = (id: string): void => {
@@ -280,6 +451,10 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   }
 
   const onClick = (event: MouseEvent) => {
+    if (swallowClick) {
+      swallowClick = false
+      return
+    }
     const target = event.target as HTMLElement
 
     // The close button of the selected room outranks the room beneath it:
@@ -347,6 +522,14 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     // not something to leave lying around for the next input to walk into.
     if (isEditableTarget(event.target)) return
 
+    // Mid-drag the keyboard does one thing, let go. Anything else would
+    // change the vault under a drag still resolving drops against the vault
+    // it started from.
+    if (drag) {
+      if (event.key === 'Escape') endDrag()
+      return
+    }
+
     const { selection, tool, vault } = store.state
     if (event.key === 'Escape') {
       // Escape means "never mind", so it leaves whichever of the two modes
@@ -402,14 +585,27 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   canvas.addEventListener('mousemove', onMouseMove)
   canvas.addEventListener('mouseleave', onMouseLeave)
   document.addEventListener('keydown', onKeydown)
+  canvas.addEventListener('pointerdown', onPointerDown)
+  canvas.addEventListener('pointermove', onPointerMove)
+  canvas.addEventListener('pointerup', onPointerUp)
+  canvas.addEventListener('pointercancel', onPointerCancel)
+  canvas.addEventListener('lostpointercapture', onPointerCancel)
+  scrollEl.addEventListener('scroll', onScroll)
   const unsubscribe = store.subscribe(paint)
   paint()
 
   return () => {
+    endDrag()
     canvas.removeEventListener('click', onClick)
     canvas.removeEventListener('mousemove', onMouseMove)
     canvas.removeEventListener('mouseleave', onMouseLeave)
     document.removeEventListener('keydown', onKeydown)
+    canvas.removeEventListener('pointerdown', onPointerDown)
+    canvas.removeEventListener('pointermove', onPointerMove)
+    canvas.removeEventListener('pointerup', onPointerUp)
+    canvas.removeEventListener('pointercancel', onPointerCancel)
+    canvas.removeEventListener('lostpointercapture', onPointerCancel)
+    scrollEl.removeEventListener('scroll', onScroll)
     if (pendingFrame !== null) cancelAnimationFrame(pendingFrame)
     unsubscribe()
   }

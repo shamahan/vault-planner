@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest'
 import { Store } from '../../src/app/state'
 import { mountCanvas, cellFromPoint, resolvePlacement, clampToFloor } from '../../src/app/interactions'
-import { createVault } from '../../src/domain/vault'
+import { createVault, findRoom, type Vault } from '../../src/domain/vault'
 import { canApply } from '../../src/domain/validate'
 import { CELLS_PER_FLOOR, FLOOR_COUNT } from '../../src/domain/grid'
 import { CELL_PX, COLORS, FLOOR_GAP_PX, FLOOR_PX, SCENE_GUTTER_PX, SCENE_PAD_PX } from '../../src/render/theme'
@@ -14,11 +14,11 @@ import { CELL_PX, COLORS, FLOOR_GAP_PX, FLOOR_PX, SCENE_GUTTER_PX, SCENE_PAD_PX 
 // disposer so afterEach can tear each one down.
 let cleanups: Array<() => void> = []
 
-function mount() {
+function mount(vault: Vault = createVault()) {
   localStorage.clear()
   document.body.innerHTML = '<main id="canvas"></main>'
   const canvas = document.querySelector<HTMLElement>('#canvas')!
-  const store = new Store(createVault())
+  const store = new Store(vault)
   cleanups.push(mountCanvas(canvas, store))
   return { canvas, store }
 }
@@ -51,6 +51,28 @@ function clickCell(canvas: HTMLElement, clientX: number, clientY: number): void 
     new MouseEvent('click', { bubbles: true, clientX, clientY }),
   )
 }
+
+/**
+ * jsdom 25 has no PointerEvent and no pointer capture. The canvas reads
+ * pointerId, pointerType and button off its pointer events and calls the
+ * three capture methods on itself; this is the least that satisfies both,
+ * kept here so the production code carries nothing for jsdom's sake.
+ */
+class FakePointerEvent extends MouseEvent {
+  readonly pointerId: number
+  readonly pointerType: string
+  constructor(type: string, init: MouseEventInit & { pointerId?: number; pointerType?: string } = {}) {
+    super(type, init)
+    this.pointerId = init.pointerId ?? 1
+    this.pointerType = init.pointerType ?? 'mouse'
+  }
+}
+
+beforeAll(() => {
+  Element.prototype.setPointerCapture = () => {}
+  Element.prototype.releasePointerCapture = () => {}
+  Element.prototype.hasPointerCapture = () => false
+})
 
 beforeEach(() => localStorage.clear())
 
@@ -709,5 +731,190 @@ describe('the delete handle', () => {
     expect(canvas.querySelector('[data-refusal]')?.textContent ?? '').not.toBe('')
     expect(confirmed).toHaveBeenCalled()
     confirmed.mockRestore()
+  })
+})
+
+describe('dragging a room', () => {
+  // Floor 0: door [0,9), elevator e0 at 9, diner d0 [10,13).
+  // Floor 1: elevator e1 at 9, garden g1 [10,13), free from 13 on.
+  function dragVault(): Vault {
+    const v = createVault()
+    v.rooms.push(
+      { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+      { id: 'd0', type: 'diner', floor: 0, x: 10, w: 3 },
+      { id: 'e1', type: 'elevator', floor: 1, x: 9, w: 1 },
+      { id: 'g1', type: 'garden', floor: 1, x: 10, w: 3 },
+    )
+    return v
+  }
+
+  type At = { floor: number; x: number }
+  const px = (x: number): number => SCENE_GUTTER_PX + x * CELL_PX + 1
+  const py = (floor: number): number => SCENE_PAD_PX + floor * (FLOOR_PX + FLOOR_GAP_PX) + 1
+
+  function pointer(target: Element, type: string, clientX: number, clientY: number, pointerType = 'mouse'): void {
+    target.dispatchEvent(new FakePointerEvent(type, { bubbles: true, clientX, clientY, button: 0, pointerType }))
+  }
+
+  // A press reads the svg's layout, and so does every frame after it -- but
+  // taking hold of a room selects it, which repaints the scene and replaces
+  // the svg, so the stub has to go on again after the first move.
+  function press(canvas: HTMLElement, id: string, at: At, pointerType = 'mouse'): void {
+    stubZeroLayout(canvas.querySelector('svg')!)
+    pointer(canvas.querySelector(`[data-room-id="${id}"]`)!, 'pointerdown', px(at.x), py(at.floor), pointerType)
+  }
+
+  function moveTo(canvas: HTMLElement, at: At, pointerType = 'mouse'): void {
+    pointer(canvas, 'pointermove', px(at.x), py(at.floor), pointerType)
+    stubZeroLayout(canvas.querySelector('svg')!)
+  }
+
+  function release(canvas: HTMLElement, at: At, pointerType = 'mouse'): void {
+    pointer(canvas, 'pointerup', px(at.x), py(at.floor), pointerType)
+  }
+
+  function drag(canvas: HTMLElement, id: string, from: At, to: At): void {
+    press(canvas, id, from)
+    moveTo(canvas, to)
+    release(canvas, to)
+  }
+
+  function nextFrame(): Promise<void> {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+  }
+
+  const refusal = (canvas: HTMLElement): string => canvas.querySelector('[data-refusal]')?.textContent ?? ''
+
+  it('stays a click when the pointer barely moves', () => {
+    const { canvas, store } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    pointer(canvas, 'pointermove', px(10) + 2, py(0))
+    expect(canvas.querySelector('[data-dragging]')).toBeNull()
+    release(canvas, { floor: 0, x: 10 })
+    clickRoom(canvas, 'd0')
+    expect(store.state.selection).toBe('d0')
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('moves a room dropped on free cells, as one undo step', () => {
+    const { canvas, store } = mount(dragVault())
+    // Strict mode: of floor 1's free cells only x 13, against the garden, connects.
+    drag(canvas, 'd0', { floor: 0, x: 10 }, { floor: 1, x: 18 })
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 1, x: 13 })
+    store.undo()
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('swaps a room dropped on another, and keeps it selected', () => {
+    const { canvas, store } = mount(dragVault())
+    drag(canvas, 'd0', { floor: 0, x: 10 }, { floor: 1, x: 11 })
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 1, x: 10 })
+    expect(findRoom(store.state.vault, 'g1')).toMatchObject({ floor: 0, x: 10 })
+    expect(store.state.selection).toBe('d0')
+  })
+
+  it('says why a drop is refused and leaves the vault alone', () => {
+    const { canvas, store } = mount(dragVault())
+    const before = store.state.vault
+    drag(canvas, 'd0', { floor: 0, x: 10 }, { floor: 0, x: 3 })
+    expect(store.state.vault).toBe(before)
+    expect(refusal(canvas)).toMatch(/vault door/i)
+  })
+
+  it('shows both ghosts while a swap is aimed, and puts them away on Escape', async () => {
+    const { canvas, store } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 1, x: 11 })
+    await nextFrame()
+    const ghost = canvas.querySelector('[data-ghost]')!
+    const swapGhost = canvas.querySelector('[data-ghost-swap]')!
+    expect(ghost.getAttribute('visibility')).toBe('visible')
+    expect(ghost.getAttribute('x')).toBe(String(SCENE_GUTTER_PX + 10 * CELL_PX + 1))
+    expect(ghost.getAttribute('y')).toBe(String(SCENE_PAD_PX + (FLOOR_PX + FLOOR_GAP_PX) + 3))
+    expect(ghost.getAttribute('stroke')).toBe(COLORS.accepted)
+    expect(swapGhost.getAttribute('visibility')).toBe('visible')
+    expect(swapGhost.getAttribute('y')).toBe(String(SCENE_PAD_PX + 3))
+    expect(canvas.querySelector('[data-room-id="d0"]')!.hasAttribute('data-dragging')).toBe(true)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(ghost.getAttribute('visibility')).toBe('hidden')
+    expect(swapGhost.getAttribute('visibility')).toBe('hidden')
+    expect(canvas.querySelector('[data-dragging]')).toBeNull()
+
+    release(canvas, { floor: 1, x: 11 })
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
+  })
+
+  it('ignores the arrow keys mid-drag', () => {
+    const { canvas, store } = mount(dragVault())
+    // Free mode, so that ArrowRight on the selected diner would be accepted
+    // if it got through.
+    store.setMode('free')
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 0, x: 18 })
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
+  })
+
+  it('swallows the click a browser sends after the drop', () => {
+    const { canvas, store } = mount(dragVault())
+    drag(canvas, 'd0', { floor: 0, x: 10 }, { floor: 1, x: 18 })
+    // Unswallowed, a click on the bare canvas would deselect.
+    canvas.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(store.state.selection).toBe('d0')
+  })
+
+  it('does not eat the next real click when no click followed the drop', () => {
+    const { canvas, store } = mount(dragVault())
+    drag(canvas, 'd0', { floor: 0, x: 10 }, { floor: 1, x: 18 })
+    // Let go outside the canvas: no click came. The next click is a real
+    // one, and like every real click it starts with a press.
+    pointer(canvas.querySelector('[data-room-id="door"]')!, 'pointerdown', px(3), py(0))
+    clickRoom(canvas, 'door')
+    expect(store.state.selection).toBe('door')
+  })
+
+  it('leaves touch to scroll the scene', () => {
+    const { canvas, store } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 }, 'touch')
+    moveTo(canvas, { floor: 1, x: 18 }, 'touch')
+    release(canvas, { floor: 1, x: 18 }, 'touch')
+    expect(canvas.querySelector('[data-dragging]')).toBeNull()
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
+  })
+
+  it('puts an armed palette room down on taking hold of a room', () => {
+    const { canvas, store } = mount(dragVault())
+    store.setTool('diner')
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 1, x: 18 })
+    expect(store.state.tool).toBeNull()
+    expect(store.state.selection).toBe('d0')
+  })
+
+  it('never picks up the vault door', () => {
+    const { canvas, store } = mount(dragVault())
+    press(canvas, 'door', { floor: 0, x: 3 })
+    moveTo(canvas, { floor: 1, x: 18 })
+    expect(canvas.querySelector('[data-dragging]')).toBeNull()
+    expect(store.state.selection).toBeNull()
+  })
+
+  it('re-aims the ghost when the scene scrolls under a still pointer', async () => {
+    const { canvas } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 1, x: 18 })
+    await nextFrame()
+    const ghost = canvas.querySelector('[data-ghost]')!
+    expect(ghost.getAttribute('y')).toBe(String(SCENE_PAD_PX + (FLOOR_PX + FLOOR_GAP_PX) + 3))
+
+    // Scrolled down by one floor: the same pointer is now over floor 2.
+    const svg = canvas.querySelector('svg')!
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: -(FLOOR_PX + FLOOR_GAP_PX), width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} }) as DOMRect
+    canvas.querySelector('.scene-scroll')!.dispatchEvent(new Event('scroll'))
+    await nextFrame()
+    expect(ghost.getAttribute('y')).toBe(String(SCENE_PAD_PX + 2 * (FLOOR_PX + FLOOR_GAP_PX) + 3))
   })
 })
