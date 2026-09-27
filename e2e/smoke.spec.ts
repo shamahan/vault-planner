@@ -183,8 +183,11 @@ test('drag a room onto another to swap them, then onto free cells to move it', a
     const at = await cell(floor, x)
     await page.mouse.click(at.x, at.y)
   }
+  // A room with levels is titled "Diner, level 1"; the elevator and the
+  // door carry no level. Anchored at both ends either way, so "Diner"
+  // never matches some other room with the word inside its name.
   const room = (name: string) =>
-    page.locator('[data-room-id]', { has: page.locator('title', { hasText: new RegExp(`^${name}$`) }) })
+    page.locator('[data-room-id]', { has: page.locator('title', { hasText: new RegExp(`^${name}(, level \\d)?$`) }) })
   const dragFromTo = async (from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> => {
     await page.mouse.move(from.x, from.y)
     await page.mouse.down()
