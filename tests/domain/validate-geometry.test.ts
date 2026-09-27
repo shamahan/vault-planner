@@ -78,4 +78,10 @@ describe('validate: geometry', () => {
     const v = withRooms({ id: 'a', type: 'diner', floor: 1, x: 24, w: 3 })
     for (const p of validate(v)) expect(p.message.length).toBeGreaterThan(0)
   })
+
+  it('reports a room above the highest level its kind has', () => {
+    const v = withRooms({ id: 'a', type: 'barbershop', floor: 1, x: 7, w: 6, level: 3 })
+    const problem = validate(v).find((p) => p.kind === 'bad-level')
+    expect(problem).toEqual({ kind: 'bad-level', message: 'Barbershop cannot be level 3.', rooms: ['a'] })
+  })
 })

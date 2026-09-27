@@ -1,10 +1,10 @@
 import { kindOf, VAULT_DOOR_TYPE } from './catalog'
 import { floorLabel, isFloor, overlaps, withinFloor } from './grid'
-import { applyOp, findRoom, roomsOnFloor, VAULT_DOOR_ID, type Op, type Room, type RoomId, type Vault } from './vault'
+import { applyOp, findRoom, levelOf, roomsOnFloor, VAULT_DOOR_ID, type Op, type Room, type RoomId, type Vault } from './vault'
 import { dependentsOf, unreachableRooms } from './reachability'
 
 export type ProblemKind =
-  | 'out-of-bounds' | 'overlap' | 'bad-width' | 'door-misplaced' | 'unreachable'
+  | 'out-of-bounds' | 'overlap' | 'bad-width' | 'bad-level' | 'door-misplaced' | 'unreachable'
 
 export type Problem = {
   kind: ProblemKind
@@ -38,6 +38,13 @@ function geometryProblems(v: Vault): Problem[] {
       problems.push({
         kind: 'bad-width',
         message: `${kindOf(r.type).name} cannot be ${r.w} cells wide.`,
+        rooms: [r.id],
+      })
+    }
+    if (levelOf(r) > kindOf(r.type).maxLevel) {
+      problems.push({
+        kind: 'bad-level',
+        message: `${kindOf(r.type).name} cannot be level ${levelOf(r)}.`,
         rooms: [r.id],
       })
     }
@@ -104,7 +111,7 @@ function refuse(reason: string, blame: RoomId[] = []): Verdict {
 
 function touchedIds(op: Op): RoomId[] {
   switch (op.kind) {
-    case 'remove': case 'move': case 'split': return [op.id]
+    case 'remove': case 'move': case 'split': case 'level': return [op.id]
     case 'swap': return [op.id, op.with]
     case 'removeMany': return op.ids
     default: return []
@@ -151,6 +158,27 @@ function swapRefusal(v: Vault, op: Extract<Op, { kind: 'swap' }>): Verdict | nul
 }
 
 /**
+ * What makes a level change wrong before it is tried. The room is known to
+ * exist: canApply has already looked it up. Asking for the level a room
+ * already has is refused rather than let through, because store.run would
+ * otherwise commit an unchanged vault -- one more undo step, and any redo
+ * the person had queued thrown away, for nothing they could see.
+ */
+function levelRefusal(v: Vault, op: Extract<Op, { kind: 'level' }>): Verdict | null {
+  const room = findRoom(v, op.id) as Room
+  const kind = kindOf(room.type)
+  if (!Number.isInteger(op.level) || op.level < 1 || op.level > kind.maxLevel) {
+    return kind.maxLevel === 1
+      ? refuse(`The ${kind.name} has no levels.`, [room.id])
+      : refuse(`The ${kind.name} goes from level 1 to level ${kind.maxLevel}.`, [room.id])
+  }
+  if (op.level === levelOf(room)) {
+    return refuse(`The ${kind.name} is already level ${op.level}.`, [room.id])
+  }
+  return null
+}
+
+/**
  * A new overlap reads as a description of the result -- "Diner and Lounge
  * overlap on floor 3" -- which is right for a placement and odd as the
  * answer to a move. When the room being moved is one of the pair, say what
@@ -186,6 +214,10 @@ export function canApply(v: Vault, op: Op, mode: Mode): Verdict {
 
   if (op.kind === 'swap') {
     const refusal = swapRefusal(v, op)
+    if (refusal) return refusal
+  }
+  if (op.kind === 'level') {
+    const refusal = levelRefusal(v, op)
     if (refusal) return refusal
   }
 

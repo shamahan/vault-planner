@@ -341,3 +341,49 @@ describe('canApply: swap', () => {
     if (!verdict.ok) expect(verdict.reason).toMatch(/overlap on floor 1\.$/)
   })
 })
+
+describe('canApply: room levels', () => {
+  const connected = () => vaultWith(
+    { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+    { id: 'd0', type: 'diner', floor: 0, x: 10, w: 3 },
+    { id: 'b0', type: 'barbershop', floor: 0, x: 13, w: 6 },
+  )
+
+  it('raises a room in either mode', () => {
+    for (const mode of ['strict', 'free'] as const) {
+      expect(canApply(connected(), { kind: 'level', id: 'd0', level: 3 }, mode).ok).toBe(true)
+    }
+  })
+
+  it('refuses a level the room does not have', () => {
+    const verdict = canApply(connected(), { kind: 'level', id: 'b0', level: 3 }, 'free')
+    expect(verdict).toEqual({ ok: false, reason: 'The Barbershop goes from level 1 to level 2.', blame: ['b0'] })
+  })
+
+  it('refuses any level on an elevator', () => {
+    const verdict = canApply(connected(), { kind: 'level', id: 'e0', level: 2 }, 'free')
+    expect(verdict).toEqual({ ok: false, reason: 'The Elevator has no levels.', blame: ['e0'] })
+  })
+
+  it('refuses the level the room already has, so undo is not given a no-op', () => {
+    const verdict = canApply(connected(), { kind: 'level', id: 'd0', level: 1 }, 'strict')
+    expect(verdict).toEqual({ ok: false, reason: 'The Diner is already level 1.', blame: ['d0'] })
+  })
+
+  it('refuses to change the vault door', () => {
+    const verdict = canApply(connected(), { kind: 'level', id: 'door', level: 2 }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toMatch(/vault door/i)
+  })
+
+  it('lets you change the level of a room that was already cut off, in strict mode', () => {
+    // A level change can merge rooms but never changes which cells are
+    // taken, so it cannot strand anything -- and it must not be blocked on
+    // an already-broken vault, or that vault could not be tidied up.
+    const v = vaultWith(
+      { id: 'lost', type: 'diner', floor: 3, x: 12, w: 3 },
+      { id: 'lost2', type: 'diner', floor: 3, x: 15, w: 3, level: 2 },
+    )
+    expect(canApply(v, { kind: 'level', id: 'lost', level: 2 }, 'strict').ok).toBe(true)
+  })
+})
