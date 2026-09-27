@@ -33,9 +33,10 @@ function what(title: string, detail: string): string {
  */
 function legend(mode: Mode): string {
   if (mode !== 'free') return ''
-  return SEP +
+  return SEP + '<span class="legends">' +
     '<span class="legend"><span class="swatch lit"></span>Keeps a route to the door</span>' +
-    '<span class="legend"><span class="swatch dim"></span>Fits, Free rules only</span>'
+    '<span class="legend"><span class="swatch dim"></span>Fits, Free rules only</span>' +
+    '</span>'
 }
 
 function carryingBar(s: DockState, id: RoomId): string {

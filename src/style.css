@@ -84,13 +84,17 @@ body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
   border: 1px solid #2b3831; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35);
   font-size: 13px; color: #c3d0ca; pointer-events: auto; }
 .refusal:empty, .dock-bar:empty { display: none; }
-.bar { pointer-events: auto; display: flex; flex-wrap: wrap; align-items: center;
-  justify-content: center; gap: 6px; padding: 8px; background: #151c19;
+.bar { pointer-events: auto; display: flex; align-items: center; max-width: 100%;
+  box-sizing: border-box; gap: 6px; padding: 8px; background: #151c19;
   border: 1px solid #2b3831; border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.45);
   font-size: 13px; color: #dce5e0; }
 .bar .tile { width: 40px; height: 40px; flex: none; display: inline-flex; align-items: center;
   justify-content: center; border-radius: 9px; }
-.bar .what { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 0 4px; }
+.bar > * { flex: none; }
+/* The one part of a bar that gives: when the bar runs short of room its
+   words wrap, and its buttons stay on one row where the hand expects them. */
+.bar .what { flex: 0 1 auto; min-width: 140px; display: flex; flex-direction: column; gap: 2px;
+  padding: 0 8px 0 4px; }
 .bar .what strong { font-size: 14px; font-weight: 600; }
 .bar .what span { font-size: 12.5px; color: #9faea7; }
 .bar .sep, .toolbar .sep { width: 1px; height: 28px; margin: 0 4px; background: #26332d; }
@@ -112,6 +116,7 @@ body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
 kbd { font-family: ui-monospace, monospace; font-size: 10.5px; padding: 1px 5px;
   border: 1px solid #2e3d36; border-radius: 4px; color: #9faea7; }
 .bar button.danger kbd { color: inherit; border-color: rgba(215,96,58,.4); }
+.legends { display: flex; flex-direction: column; gap: 4px; }
 .legend { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: #c3d0ca; }
 .swatch { width: 22px; height: 14px; flex: none; box-sizing: border-box; border-radius: 2px; }
 .swatch.lit { background: rgba(227,166,60,.1); border-bottom: 3px solid #e3a63c; }
@@ -128,6 +133,15 @@ kbd { font-family: ui-monospace, monospace; font-size: 10.5px; padding: 1px 5px;
 .zoom-level { padding: 2px 0; text-align: center; font-family: ui-monospace, monospace;
   font-size: 10.5px; color: #9faea7; }
 .bar button:focus-visible, .zoom button:focus-visible { outline: 2px solid #e3a63c; outline-offset: 2px; }
+/* A narrower canvas: what the bars can best do without is the words that
+   repeat what a button already says -- the level's label, the key hints
+   (every button still names its key in its title) and the placing bar's
+   "Esc to stop" beside its Stop button. */
+@media (max-width: 1279px) {
+  .dock { left: 64px; right: 64px; }
+  .bar[data-bar="selected"] .label, .bar[data-bar="selected"] kbd,
+  .bar[data-bar="placing"] .hint { display: none; }
+}
 /* Dragging a room (src/app/interactions.ts). Room labels are drawn text,
    and a press-and-drag across them would otherwise select it. The open
    hand marks what can be picked up -- never the vault door, which the
