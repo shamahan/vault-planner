@@ -24,11 +24,19 @@ body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
    "overflow: auto" never fires, and the extra height reaches the document.
    display:contents drops the wrappers out of layout so the panels really
    are the flex items the rest of this file assumes they are. */
-[data-toolbar], [data-palette], [data-problems-panel] { display: contents; }
+[data-toolbar], [data-palette], [data-problems-panel], [data-mobile-bar], [data-menu-panel] { display: contents; }
+/* The toolbar's groups, wrapped only so a breakpoint can take a whole one
+   away (see renderToolbar); at full width they are not boxes at all. */
+.toolbar-files, .toolbar-rules, .toolbar-problems { display: contents; }
+/* What only narrow screens show. The buttons are named through .toolbar
+   and .sheet-head, or ".toolbar button" and ".sheet-head [data-sheet-close]"
+   below would outrank this and show them everywhere. */
+.rules-tag, .toolbar .rooms-button, .toolbar .menu-button, .palette .sheet-head [data-sheet-close],
+.mobile-bar, .scrim { display: none; }
 .toolbar { display: flex; flex: none; align-items: center; gap: 4px; padding: 0 16px;
   height: 56px; background: #151c19; border-bottom: 1px solid #26332d; }
 .toolbar .spacer { flex: 1; }
-.brand { display: inline-flex; align-items: center; gap: 10px;
+.brand { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap;
   font-family: ui-monospace, monospace; letter-spacing: .14em; color: #86968f; font-size: 13px; }
 .brand svg { flex: none; color: #e3a63c; }
 /* flex: none pins the palette to its stated width -- the canvas beside it
@@ -109,7 +117,7 @@ body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
    room's level in the dock. The pressed one is the one in force. */
 .seg { display: inline-flex; gap: 2px; padding: 2px; background: #0e1412;
   border: 1px solid #26332d; border-radius: 9px; }
-.bar .seg button, .toolbar .seg button { height: 28px; min-width: 32px; padding: 0 10px;
+.bar .seg button, .toolbar .seg button { height: 28px; min-width: 32px; padding: 0 10px; justify-content: center;
   background: transparent; border: 0; border-radius: 7px; color: #b9c6c0; font-size: 12.5px; }
 .bar .seg button[aria-pressed="true"], .toolbar .seg button[aria-pressed="true"] {
   background: #e3a63c; color: #0e1412; font-weight: 700; }
@@ -162,13 +170,13 @@ kbd { font-family: ui-monospace, monospace; font-size: 10.5px; padding: 1px 5px;
    beside it -- the name broken up, the details not. The glyph spans both
    rows down the left; the label spans both text columns so it has the whole
    width of the button to fit on one line. */
-.palette button { display: grid; grid-template-columns: auto 1fr auto;
+.palette [data-place-type] { display: grid; grid-template-columns: auto 1fr auto;
   column-gap: 10px; row-gap: 2px; align-items: center; width: calc(100% - 24px);
   margin: 0 12px 6px; padding: 8px 10px; background: #182220; color: #dce5e0;
   border: 1px solid #253029; border-radius: 7px; font: inherit; font-size: 13px;
   text-align: left; cursor: pointer; }
-.palette button[aria-pressed="true"] { border-color: #e3a63c; background: rgba(227,166,60,.14); }
-.palette button > svg { grid-row: 1 / span 2; }
+.palette [data-place-type][aria-pressed="true"] { border-color: #e3a63c; background: rgba(227,166,60,.14); }
+.palette [data-place-type] > svg { grid-row: 1 / span 2; }
 .palette .label { grid-column: 2 / span 2; }
 .palette .hint { grid-column: 2; }
 .palette .width { grid-column: 3; justify-self: end; }
@@ -206,10 +214,134 @@ kbd { font-family: ui-monospace, monospace; font-size: 10.5px; padding: 1px 5px;
 /* Free is a choice as much as Strict, not a warning: pressed, it is lit
    plainly rather than in the accent. */
 .toolbar .seg button[data-mode="free"][aria-pressed="true"] { background: #2e3d36; color: #f1f6f3; }
-.toolbar .chip { border: 1px solid #2b3831; border-radius: 999px; color: #b9c6c0; padding: 0 12px 0 10px; }
-.toolbar .chip .icon:first-child { color: #9faea7; }
-.toolbar .chip.has-problems { border-color: rgba(227,166,60,.6); background: rgba(227,166,60,.12);
+.chip { border: 1px solid #2b3831; border-radius: 999px; color: #b9c6c0; padding: 0 12px 0 10px; }
+.chip .icon:first-child { color: #9faea7; }
+.chip.has-problems { border-color: rgba(227,166,60,.6); background: rgba(227,166,60,.12);
   color: #e3a63c; font-weight: 600; padding-right: 10px; }
-.toolbar .chip.has-problems .icon:first-child { color: inherit; }
-.name { width: 150px; padding: 7px 10px; background: #0e1412; color: #dce5e0;
+.chip.has-problems .icon:first-child { color: inherit; }
+.toolbar .icon-only { width: 40px; padding: 0; justify-content: center; }
+/* The head of a sheet: its title, and on narrow screens a way out. */
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sheet-head [data-sheet-close] { width: 44px; height: 44px; flex: none; display: inline-flex;
+  align-items: center; justify-content: center; padding: 0; background: transparent; border: 0;
+  border-radius: 10px; color: #c3d0ca; cursor: pointer; }
+/* The menu: only a narrow screen has its button. Laid out like the problems
+   list it opens beside. */
+.menu { display: flex; flex-direction: column; gap: 10px; padding: 8px 16px 16px; box-sizing: border-box;
+  overflow: auto; overscroll-behavior: contain; background: #151c19; border: 1px solid #2b3831;
+  border-radius: 14px; box-shadow: 0 18px 48px rgba(0,0,0,.55); }
+.menu[hidden] { display: none; }
+.menu .sheet-head h2 { margin: 0; font-size: 17px; font-weight: 600; color: #dce5e0; }
+.menu-actions { display: flex; flex-direction: column; background: #182220; border: 1px solid #253029;
+  border-radius: 12px; overflow: hidden; }
+.menu-actions button { display: flex; align-items: center; justify-content: space-between; height: 48px;
+  padding: 0 16px; background: transparent; border: 0; border-bottom: 1px solid #1f2a25; color: #dce5e0;
+  font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.menu-actions button:last-child { border-bottom: 0; }
+.menu-actions .meta { font-family: ui-monospace, monospace; font-size: 11px; color: #86968f; }
+.menu h3 { margin: 6px 0 0; font-family: ui-monospace, monospace; font-size: 10px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; color: #86968f; }
+.menu .seg { display: grid; grid-template-columns: 1fr 1fr; }
+.menu .seg button { height: 40px; background: transparent; border: 0; border-radius: 7px; color: #b9c6c0;
+  font: inherit; font-size: 15px; cursor: pointer; }
+.menu .seg button[aria-pressed="true"] { background: #e3a63c; color: #0e1412; font-weight: 700; }
+.menu .seg button[data-mode="free"][aria-pressed="true"] { background: #2e3d36; color: #f1f6f3; }
+.menu .note { margin: 0; font-size: 13px; line-height: 1.45; color: #9faea7; }
+.menu .small { margin: 0; font-size: 12px; line-height: 1.4; color: #86968f; }
+.menu .disclaimer { margin: 4px 0 0; padding-top: 12px; border-top: 1px solid #1f2a25;
+  font-size: 11.5px; line-height: 1.45; color: #86968f; }
+.menu .disclaimer p { margin: 0; }
+.menu button:focus-visible, .sheet-head button:focus-visible { outline: 2px solid #e3a63c; outline-offset: 2px; }
+
+/* Under 1100px: no room for the palette beside the grid, nor for the file
+   actions. The palette slides in from the left over the grid, from the
+   Rooms button; the file actions and the rules go to the menu (the rules
+   stay in the toolbar too, while there is room); Undo and Redo keep only
+   their icons, their words hidden from sight but not from their names. */
+@media (max-width: 1099px) {
+  .toolbar-files, .rules-label { display: none; }
+  .toolbar .rooms-button, .toolbar .menu-button { display: inline-flex; }
+  .toolbar .label-text { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; }
+  .toolbar [data-action="undo"], .toolbar [data-action="redo"] { width: 40px; padding: 0; justify-content: center; }
+  .body { position: relative; }
+  .palette { position: absolute; top: 0; left: 0; bottom: 0; z-index: 20; visibility: hidden;
+    transform: translateX(-100%); transition: transform .18s ease, visibility .18s;
+    box-shadow: 12px 0 32px rgba(0,0,0,.45); }
+  .shell.rooms-open .palette { visibility: visible; transform: none; }
+  .palette .sheet-head [data-sheet-close] { display: inline-flex; }
+  .menu { position: absolute; top: 62px; right: 16px; z-index: 30; width: 340px; max-height: calc(100% - 80px); }
+  /* Under the sheet, not under the toolbar: the toolbar stays in reach. */
+  .scrim { position: absolute; left: 0; right: 0; top: 56px; bottom: 0; z-index: 15; background: rgba(4,7,6,.5); }
+  .shell.rooms-open .scrim, .shell.menu-open .scrim { display: block; }
+}
+
+/* A phone. The toolbar keeps the mark, the rules in force, Undo, Redo and
+   the menu; the counter and the way into the room list move to a bar along
+   the bottom, where a thumb is. The room list, the problems and the menu
+   become sheets from the bottom. The dock becomes a sheet too, in the
+   bottom bar's place while it shows anything. */
+@media (max-width: 719px) {
+  .toolbar { padding: 0 4px 0 12px; gap: 2px; }
+  .brand { gap: 8px; font-size: 12px; }
+  .rules-tag { display: inline-flex; margin: 0 4px 0 6px; padding: 2px 6px; border: 1px solid rgba(227,166,60,.45);
+    border-radius: 4px; font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .1em; color: #e3a63c; }
+  .toolbar .rooms-button, .toolbar-rules, .toolbar-problems { display: none; }
+  .toolbar button { height: 44px; }
+  .toolbar [data-action="undo"], .toolbar [data-action="redo"], .toolbar .menu-button { width: 44px; }
+
+  .mobile-bar { display: flex; flex: none; align-items: center; gap: 10px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: #151c19; border-top: 1px solid #26332d; }
+  .mobile-bar .spacer { flex: 1; }
+  .mobile-bar button { display: inline-flex; align-items: center; gap: 8px; height: 48px; font: inherit;
+    font-size: 14px; cursor: pointer; }
+  .mobile-bar .chip { background: transparent; padding: 0 16px 0 14px; }
+  .mobile-bar .primary { padding: 0 20px 0 16px; background: #e3a63c; border: 0; border-radius: 12px;
+    color: #0e1412; font-size: 15px; font-weight: 600; }
+  .mobile-bar button:focus-visible { outline: 2px solid #e3a63c; outline-offset: 2px; }
+  .shell:has(.dock-bar:not(:empty)) .mobile-bar { display: none; }
+
+  .palette, .problems, .menu { position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 30;
+    width: auto; max-height: 80vh; box-sizing: border-box; border: 0; border-top: 1px solid #2b3831;
+    border-radius: 18px 18px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,.5);
+    padding-bottom: env(safe-area-inset-bottom); }
+  .palette { height: 80vh; transform: translateY(100%); }
+  .shell.rooms-open .palette { transform: none; }
+  .palette .sheet-head h2 { font-size: 12px; }
+  .palette [data-place-type] { min-height: 52px; }
+  .menu { padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .problems { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  .problems-list button { min-height: 56px; }
+  .scrim { position: fixed; top: 56px; }
+  .shell.problems-open .scrim { display: block; }
+
+  /* The fitted grid can use nearly the whole width; applyZoom reads these
+     sides back before it fits. The bottom clears a selected room's sheet. */
+  .scene-scroll { padding: 0 8px 240px; }
+  .dock { left: 0; right: 0; bottom: 0; gap: 6px; }
+  .refusal { margin: 0 8px; }
+  .bar { width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 8px; border-width: 1px 0 0;
+    border-radius: 18px 18px 0 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); }
+  .bar .sep { display: none; }
+  .bar button { height: 44px; }
+  .bar button.icon-only { width: 44px; }
+  /* Row one: what it is, and a way to let go. Row two: the four arrows,
+     sharing the width. Row three: the levels, and Delete. */
+  .bar[data-bar="selected"] > * { order: 3; }
+  .bar[data-bar="selected"] .tile, .bar[data-bar="selected"] .what { order: 0; }
+  .bar[data-bar="selected"] [data-deselect] { order: 1; }
+  .bar[data-bar="selected"] [data-nudge] { order: 2; flex: 1 1 calc(25% - 6px); width: auto; }
+  .bar[data-bar="selected"] .what { flex: 1 1 calc(100% - 112px); }
+  .bar[data-bar="selected"] .seg { flex: 1 1 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+  .bar[data-bar="selected"] .seg button { height: 40px; }
+  .bar[data-bar="placing"] .what { flex: 1 1 calc(100% - 144px); }
+  .bar[data-bar="placing"] [data-stop-placing] { order: 1; }
+  .bar .legends { order: 2; flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; gap: 6px 16px; }
+  .bar[data-bar="carrying"] .what { flex: 1 1 calc(100% - 56px); }
+  .bar[data-bar="carrying"] .hint { display: none; }
+
+  .zoom { right: 12px; bottom: 12px; }
+  .zoom button { width: 44px; height: 44px; }
+  .canvas:has(.dock-bar:not(:empty)) .zoom { display: none; }
+}.name { width: 150px; padding: 7px 10px; background: #0e1412; color: #dce5e0;
   border: 1px solid #2e3d36; border-radius: 6px; font: inherit; font-size: 13px; }

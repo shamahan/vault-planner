@@ -253,9 +253,9 @@ test('the bar under the grid sets a level, and the toolbar counts what is wrong'
   const astray = await cell(6, 4)
   await page.mouse.click(astray.x, astray.y)
   await page.keyboard.press('Escape')
-  await expect(page.locator('[data-problems-toggle]')).toHaveText('1 problem')
+  await expect(page.locator('.toolbar [data-problems-toggle]')).toHaveText('1 problem')
 
-  await page.click('[data-problems-toggle]')
+  await page.click('.toolbar [data-problems-toggle]')
   await expect(page.locator('.problems')).toBeVisible()
   await page.click('[data-problem-room]')
   await expect(page.locator('.problems')).toBeHidden()
