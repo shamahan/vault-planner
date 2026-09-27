@@ -49,4 +49,17 @@ describe('catalog', () => {
     expect(kindOf('overseers_office').baseWidth).toBe(6)
     expect(kindOf('weapon_workshop').baseWidth).toBe(9)
   })
+
+  it('upgrades every room to level 3 but the elevator, the door and the barbershop', () => {
+    // From the game's own table (see the fallout-shelter-room-parameters
+    // note): the elevator has no upgrades, the barbershop stops at 2, and
+    // the vault door's upgrades exist in the game but the planner never
+    // lets anyone change the door, so it is not modelled.
+    expect(kindOf(ELEVATOR_TYPE).maxLevel).toBe(1)
+    expect(kindOf(VAULT_DOOR_TYPE).maxLevel).toBe(1)
+    expect(kindOf('barbershop').maxLevel).toBe(2)
+    const rest = ROOM_KINDS.filter((k) => ![ELEVATOR_TYPE, VAULT_DOOR_TYPE, 'barbershop'].includes(k.id))
+    expect(rest).toHaveLength(25)
+    for (const k of rest) expect(k.maxLevel, k.id).toBe(3)
+  })
 })

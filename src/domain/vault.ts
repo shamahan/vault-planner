@@ -3,6 +3,8 @@ import { overlaps, touches } from './grid'
 
 export type RoomId = string
 
+export type Level = 1 | 2 | 3
+
 export type Room = {
   id: RoomId
   type: string
@@ -10,6 +12,16 @@ export type Room = {
   /** Leftmost cell. The room occupies [x, x + w). */
   x: number
   w: number
+  /**
+   * Absent means 1: every room is built at level 1, and files written
+   * before levels existed carry none. Read it through levelOf, never
+   * directly, so the two spellings of level 1 can never disagree.
+   */
+  level?: Level
+}
+
+export function levelOf(r: Room): Level {
+  return r.level ?? 1
 }
 
 export type Vault = {

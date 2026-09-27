@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  createVault, roomsOnFloor, findRoom, nextRoomId, VAULT_DOOR_ID,
+  createVault, roomsOnFloor, findRoom, nextRoomId, levelOf, VAULT_DOOR_ID,
 } from '../../src/domain/vault'
 import { VAULT_DOOR_TYPE } from '../../src/domain/catalog'
 
@@ -38,5 +38,10 @@ describe('vault', () => {
     expect(findRoom(v, id)).toBeUndefined()
     v.rooms.push({ id, type: 'elevator', floor: 1, x: 6, w: 1 })
     expect(nextRoomId(v)).not.toBe(id)
+  })
+
+  it('reads a room with no level as level 1', () => {
+    expect(levelOf({ id: 'a', type: 'diner', floor: 0, x: 9, w: 3 })).toBe(1)
+    expect(levelOf({ id: 'a', type: 'diner', floor: 0, x: 9, w: 3, level: 3 })).toBe(3)
   })
 })
