@@ -58,11 +58,22 @@ describe('panels', () => {
     expect(root.querySelectorAll('input, textarea')).toHaveLength(0)
   })
 
-  it('shows the mode the rules are actually in', () => {
+  it('shows the rules that are actually in force', () => {
     const { root, store } = mount()
-    expect(root.querySelector('[data-mode-toggle]')?.getAttribute('aria-checked')).toBe('true')
+    const pressed = (mode: string) => root.querySelector(`[data-mode="${mode}"]`)?.getAttribute('aria-pressed')
+    expect(pressed('strict')).toBe('true')
+    expect(pressed('free')).toBe('false')
     store.setMode('free')
-    expect(root.querySelector('[data-mode-toggle]')?.getAttribute('aria-checked')).toBe('false')
+    expect(pressed('strict')).toBe('false')
+    expect(pressed('free')).toBe('true')
+  })
+
+  it('switches the rules from the toolbar', () => {
+    const { root, store } = mount()
+    root.querySelector<HTMLElement>('[data-mode="free"]')!.click()
+    expect(store.state.mode).toBe('free')
+    root.querySelector<HTMLElement>('[data-mode="strict"]')!.click()
+    expect(store.state.mode).toBe('strict')
   })
 
   it('says the vault is sound when it is', () => {
@@ -190,12 +201,67 @@ describe('repainting the panels', () => {
 
   it('still updates the problem list and its count in place', () => {
     const { root, store } = mount()
-    expect(root.querySelector('.problems .count')?.textContent).toBe('0')
+    expect(root.querySelector('[data-problems-count]')).toBeNull()
 
     store.setMode('free')
     store.run({ kind: 'place', type: 'diner', floor: 6, x: 3 })
 
-    expect(root.querySelector('.problems .count')?.textContent).toBe('1')
+    expect(root.querySelector('[data-problems-count]')?.textContent).toBe('1')
     expect(root.querySelectorAll('[data-problem-room]').length).toBe(1)
+  })
+})
+
+describe('the problems list', () => {
+  function broken(): Vault {
+    const v = createVault()
+    v.rooms.push({ id: 'lost', type: 'diner', floor: 3, x: 12, w: 3 })
+    return v
+  }
+  const toggle = (root: HTMLElement) => root.querySelector<HTMLElement>('[data-problems-toggle]')!
+  const list = (root: HTMLElement) => root.querySelector<HTMLElement>('.problems')!
+
+  it('counts the problems in the toolbar, and says so when there are none', () => {
+    expect(toggle(mount().root).textContent).toBe('No problems')
+    expect(toggle(mount(broken()).root).textContent).toBe('1 problem')
+  })
+
+  it('opens from the counter and closes from it again', () => {
+    const { root } = mount(broken())
+    expect(list(root).hidden).toBe(true)
+    toggle(root).click()
+    expect(list(root).hidden).toBe(false)
+    expect(toggle(root).getAttribute('aria-expanded')).toBe('true')
+    toggle(root).click()
+    expect(list(root).hidden).toBe(true)
+    expect(toggle(root).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('closes when a problem is picked, on Escape, and on a click anywhere else', () => {
+    const { root, store } = mount(broken())
+    toggle(root).click()
+    root.querySelector<HTMLElement>('[data-problem-room]')!.click()
+    expect(store.state.selection).toBe('lost')
+    expect(list(root).hidden).toBe(true)
+
+    toggle(root).click()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(list(root).hidden).toBe(true)
+
+    toggle(root).click()
+    root.querySelector<HTMLElement>('[data-place-type="diner"]')!.click()
+    expect(list(root).hidden).toBe(true)
+  })
+
+  it('tells a sketch under Free rules from a vault that arrived broken', () => {
+    const { root, store } = mount(broken())
+    expect(root.querySelector('[data-problems-note]')?.textContent).toBe('')
+    store.setMode('free')
+    expect(root.querySelector('[data-problems-note]')?.textContent)
+      .toBe('Free rules let you sketch this. The game would not build it.')
+  })
+
+  it('names the floor of the room each problem is about', () => {
+    const { root } = mount(broken())
+    expect(root.querySelector('[data-problem-room="lost"]')?.textContent).toContain('FLOOR 4')
   })
 })
