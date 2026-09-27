@@ -261,3 +261,50 @@ test('the bar under the grid sets a level, and the toolbar counts what is wrong'
   await expect(page.locator('.problems')).toBeHidden()
   await expect(page.locator('[data-bar="selected"]')).toContainText('Floor 7')
 })
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test('shows the grid, and builds and levels a room with taps alone', async ({ page }) => {
+    await page.goto('./')
+
+    // The bug this layout exists for: the side panels took the whole width.
+    const scene = page.locator('.scene > svg')
+    const drawn = await scene.boundingBox()
+    expect(drawn!.width).toBeGreaterThan(300)
+
+    const cell = async (floor: number, x: number): Promise<{ x: number; y: number }> => {
+      const box = await scene.boundingBox()
+      if (!box) throw new Error('the scene was not drawn')
+      const scale = box.width / (SCENE_GUTTER_PX + CELLS_PER_FLOOR * CELL_PX + SCENE_PAD_PX)
+      return {
+        x: box.x + (SCENE_GUTTER_PX + (x + 0.5) * CELL_PX) * scale,
+        y: box.y + (SCENE_PAD_PX + floor * (FLOOR_PX + FLOOR_GAP_PX) + FLOOR_PX / 2) * scale,
+      }
+    }
+
+    // The room list is a sheet: open it, pick a room, and it gets out of the way.
+    await page.locator('.mobile-bar [data-rooms-toggle]').tap()
+    await expect(page.locator('.palette')).toBeVisible()
+    await page.locator('[data-place-type="diner"]').tap()
+    await expect(page.locator('.palette')).toBeHidden()
+
+    const beside = await cell(0, 10)
+    await page.touchscreen.tap(beside.x, beside.y)
+    await expect(page.locator('[data-room-id]')).toHaveCount(2)
+    await page.locator('[data-stop-placing]').tap()
+
+    // Everything the keys do is a button in the sheet under the grid.
+    const diner = page.locator('[data-room-id]', { has: page.locator(':scope > title', { hasText: /^Diner/ }) })
+    await diner.tap()
+    await page.locator('[data-bar="selected"] [data-set-level="3"]').tap()
+    await expect(diner.locator(':scope > title')).toHaveText('Diner, level 3')
+
+    // And what the toolbar has no room for is in the menu.
+    await page.locator('[data-bar="selected"] [data-deselect]').tap()
+    await page.locator('[data-menu-toggle]').tap()
+    await expect(page.locator('.menu [data-action="export-png"]')).toBeVisible()
+    await page.locator('.menu [data-sheet-close]').tap()
+    await expect(page.locator('.menu')).toBeHidden()
+  })
+})

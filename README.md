@@ -36,6 +36,10 @@ It runs at <https://vault.shamahan.com/planner/>.
   to its room.
 - The grid fits the window, up to 125%. The buttons at its bottom right
   zoom in and out, and **Fit** goes back to fitting.
+- On a phone the room list, the problems and the menu open as sheets from
+  the bottom, and the bar for a selected room takes the place of the one
+  along the bottom. Tap to select or to place; rest a finger on a room to
+  pick it up and carry it; pinch to zoom.
 
 ## Developing
 
