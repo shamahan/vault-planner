@@ -142,8 +142,30 @@ describe('createDropResolver', () => {
     const plan = resolve({ floor: 0, x: 3 })
     expect(plan.kind).toBe('refuse')
     if (plan.kind === 'refuse') {
-      expect(plan.verdict.reason).toMatch(/vault door/i)
+      // Not /vault door/i: that also matches the door-misplaced geometry
+      // message, so this would still pass even if touchedIds dropped op.with.
+      expect(plan.verdict.reason).toBe('The vault door is part of the vault and cannot be changed.')
       expect(plan.swapGhost).toBeUndefined()
+    }
+  })
+
+  it('refuses a move into an unreachable gap with the real reason, not the bordering room', () => {
+    // Floor 3: garden g3 [0,3), lounge l3 [6,9), a 3-wide gap between them --
+    // both rooms and the gap are unreachable (no elevator reaches floor 3).
+    const v = base()
+    v.rooms.push(
+      { id: 'g3', type: 'garden', floor: 3, x: 0, w: 3 },
+      { id: 'l3', type: 'lounge', floor: 3, x: 6, w: 3 },
+    )
+    const resolve = createDropResolver(v, 'strict', { id: 'd0', grabOffset: 1 })
+
+    for (const x of [3, 5]) {
+      const plan = resolve({ floor: 3, x })
+      expect(plan.kind).toBe('refuse')
+      if (plan.kind === 'refuse') {
+        expect(plan.ghost).toEqual({ floor: 3, x: 3, w: 3 })
+        expect(plan.verdict.reason).toMatch(/no route/)
+      }
     }
   })
 

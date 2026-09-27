@@ -99,8 +99,12 @@ export function createDropResolver(vault: Vault, mode: Mode, drag: DragStart): (
   const planMove = (a: Room, cell: Cell, want: number): DropPlan => {
     const run = freeRunAround(vault, cell.floor, cell.x, a.id)
     const opAt = (x: number): Op => ({ kind: 'move', id: a.id, floor: cell.floor, x })
-    const xs = acceptedAmong(`move:${cell.floor}:${run.x}`, run.x, run.x + run.w - a.w, opAt)
-    const x = nearest(xs, want) ?? keepOnFloor(want, a.w)
+    const last = run.x + run.w - a.w
+    const xs = acceptedAmong(`move:${cell.floor}:${run.x}`, run.x, last, opAt)
+    // With nothing accepted, keep the ghost inside the free run when the room
+    // fits there at all; clamping only to the floor can push it onto the
+    // neighbour, and canApply would then blame the neighbour, not the real reason.
+    const x = nearest(xs, want) ?? (last >= run.x ? Math.max(run.x, Math.min(last, want)) : keepOnFloor(want, a.w))
     const ghost = { floor: cell.floor, x, w: a.w }
     if (cell.floor === a.floor && x === a.x) return { kind: 'stay', ghost }
     return judge(opAt(x), ghost)
@@ -113,6 +117,9 @@ export function createDropResolver(vault: Vault, mode: Mode, drag: DragStart): (
     const onOffer = Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i)
     const opAt = (x: number): Op => ({ kind: 'swap', id: a.id, with: b.id, x })
     const xs = acceptedAmong(`swap:${b.id}`, from, to, opAt)
+    // Same rule as planMove's fallback: with nothing accepted, stay within
+    // the geometric range (A covering B) when there is one, rather than
+    // clamping straight to the floor and landing on some other neighbour.
     const x = nearest(xs, want) ?? nearest(onOffer, want) ?? keepOnFloor(want, a.w)
     const ghost = { floor: b.floor, x, w: a.w }
     // Draw where B would go only if B can go anywhere: never the vault
