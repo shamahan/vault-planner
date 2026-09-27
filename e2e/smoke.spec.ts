@@ -59,7 +59,6 @@ test('each pane scrolls on its own and the page does not scroll at all', async (
       body: (document.querySelector('.body') as HTMLElement).clientHeight,
       palette: read('.palette'),
       scene: read('.scene-scroll'),
-      problems: read('.problems'),
     }
   })
 
@@ -71,7 +70,7 @@ test('each pane scrolls on its own and the page does not scroll at all', async (
   // toolbar off the top the moment anyone used the wheel over the panel.
   expect(measured.body).toBeGreaterThan(0)
   expect(measured.body).toBeLessThan(600)
-  for (const pane of [measured.palette, measured.scene, measured.problems]) {
+  for (const pane of [measured.palette, measured.scene]) {
     expect(pane.overflowY).toBe('auto')
     expect(pane.clientHeight).toBe(measured.body)
   }
@@ -221,3 +220,44 @@ test('drag a room onto its neighbour in the row, then onto free cells to move it
   expect(moved!.x).toBeLessThan((await cell(1, 10)).x)
 })
 
+test('the bar under the grid sets a level, and the toolbar counts what is wrong', async ({ page }) => {
+  await page.goto('./')
+
+  const scene = page.locator('.scene > svg')
+  const cell = async (floor: number, x: number): Promise<{ x: number; y: number }> => {
+    const box = await scene.boundingBox()
+    if (!box) throw new Error('the scene was not drawn')
+    const scale = box.width / (SCENE_GUTTER_PX + CELLS_PER_FLOOR * CELL_PX + SCENE_PAD_PX)
+    return {
+      x: box.x + (SCENE_GUTTER_PX + (x + 0.5) * CELL_PX) * scale,
+      y: box.y + (SCENE_PAD_PX + floor * (FLOOR_PX + FLOOR_GAP_PX) + FLOOR_PX / 2) * scale,
+    }
+  }
+  const diners = page.locator('[data-room-id]', { has: page.locator('title', { hasText: /^Diner/ }) })
+
+  // A diner beside the door, then put the palette down and pick it up.
+  await page.click('[data-place-type="diner"]')
+  const beside = await cell(0, 10)
+  await page.mouse.click(beside.x, beside.y)
+  await page.keyboard.press('Escape')
+  await diners.first().click()
+  await expect(page.locator('[data-bar="selected"]')).toContainText('Diner')
+
+  await page.click('[data-bar="selected"] [data-set-level="3"]')
+  // The room's own title, not its delete handle's, which has one too.
+  await expect(diners.first().locator(':scope > title')).toHaveText('Diner, level 3')
+
+  // Under Free rules, a diner with no route to the door: the counter says so.
+  await page.click('[data-mode="free"]')
+  await page.click('[data-place-type="diner"]')
+  const astray = await cell(6, 4)
+  await page.mouse.click(astray.x, astray.y)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-problems-toggle]')).toHaveText('1 problem')
+
+  await page.click('[data-problems-toggle]')
+  await expect(page.locator('.problems')).toBeVisible()
+  await page.click('[data-problem-room]')
+  await expect(page.locator('.problems')).toBeHidden()
+  await expect(page.locator('[data-bar="selected"]')).toContainText('Floor 7')
+})

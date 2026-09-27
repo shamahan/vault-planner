@@ -16,9 +16,9 @@ It runs at <https://vault.shamahan.com/planner/>.
 - **Free mode** switches those two rules off so you can sketch in any order.
   Geometry still holds. The mode is an editor setting: it is not written into
   the file and does not travel in the share link.
-- Select a room, then use the arrow keys to move it a cell at a time,
-  Delete or Backspace to remove it, and **1**, **2** or **3** to set its
-  level. A new room is built at level 1, as in the game, and a level change
+- Select a room, then use the bar under the grid or the keys: the arrow
+  keys move it a cell at a time, Delete or Backspace removes it, and **1**,
+  **2** or **3** sets its level. A new room is built at level 1, as in the game, and a level change
   applies to the whole room. Rooms of one type merge only when their levels
   match: a new room beside a level-3 one stays separate until it is raised
   to 3. Deleting a merged room removes it whole.
@@ -30,6 +30,12 @@ It runs at <https://vault.shamahan.com/planner/>.
   changes nothing and says why. While a room is
   being placed or carried, strips light up where it would keep a route to
   the vault door; under Free rules, dimmer ones show where it merely fits.
+- The counter at the right of the toolbar says whether anything is wrong:
+  rooms with no route to the vault door, overlaps, anything the game would
+  not accept as it stands. Open it for the list, and pick a problem to go
+  to its room.
+- The grid fits the window, up to 125%. The buttons at its bottom right
+  zoom in and out, and **Fit** goes back to fitting.
 
 ## Developing
 
