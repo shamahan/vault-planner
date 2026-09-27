@@ -887,8 +887,10 @@ describe('dragging a room', () => {
     expect(canvas.querySelector('[data-room-id="d0"]')!.hasAttribute('data-dragging')).toBe(true)
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    expect(ghost.getAttribute('visibility')).toBe('hidden')
-    expect(swapGhost.getAttribute('visibility')).toBe('hidden')
+    // Looked up again: ending a drag repaints the scene to take its
+    // highlight down, so the ghosts above are no longer the ones on screen.
+    expect(canvas.querySelector('[data-ghost]')!.getAttribute('visibility')).toBe('hidden')
+    expect(canvas.querySelector('[data-ghost-swap]')!.getAttribute('visibility')).toBe('hidden')
     expect(canvas.querySelector('[data-dragging]')).toBeNull()
 
     release(canvas, { floor: 1, x: 11 })
@@ -1017,5 +1019,25 @@ describe('dragging a room', () => {
     canvas.querySelector('.scene-scroll')!.dispatchEvent(new Event('scroll'))
     await nextFrame()
     expect(ghost.getAttribute('y')).toBe(String(SCENE_PAD_PX + 2 * (FLOOR_PX + FLOOR_GAP_PX) + 3))
+  })
+
+  it('lights where the carried room could go, and clears it once the room is let go', () => {
+    const { canvas } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 1, x: 16 })
+    expect(canvas.querySelectorAll('g[data-candidate="true"]').length).toBeGreaterThan(0)
+    expect(canvas.querySelector('[data-room-id="d0"]')?.hasAttribute('data-dragging')).toBe(true)
+    release(canvas, { floor: 1, x: 16 })
+    expect(canvas.querySelectorAll('g[data-candidate]')).toHaveLength(0)
+  })
+
+  it('adds the dim tier to a drag under Free rules, and clears it when the drag is abandoned', () => {
+    const { canvas, store } = mount(dragVault())
+    store.setMode('free')
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 5, x: 4 })
+    expect(canvas.querySelectorAll('g[data-candidate="free-only"]').length).toBeGreaterThan(0)
+    pointer(canvas, 'pointercancel', px(4), py(5))
+    expect(canvas.querySelectorAll('g[data-candidate]')).toHaveLength(0)
   })
 })

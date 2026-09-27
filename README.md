@@ -25,7 +25,9 @@ It runs at <https://vault.shamahan.com/planner/>.
 - Drag a room to move it. Dropped on free cells it lands in the nearest
   spot the rules allow; dropped on another room of the same width or
   narrower, the two trade places. A drop the rules refuse changes nothing
-  and says why.
+  and says why. While a room is being placed or carried, strips light up
+  where it would keep a route to the vault door; under Free rules, dimmer
+  ones show where it merely fits.
 
 ## Developing
 

@@ -349,6 +349,10 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
       dragFrame = null
     }
     if (canvas.hasPointerCapture(ended.pointerId)) canvas.releasePointerCapture(ended.pointerId)
+    // The drop, if any, repaints again through the store; a refused or
+    // abandoned one would otherwise leave the drag's highlight standing.
+    dragHighlight = null
+    paint()
     markDragged(null)
     hideDragGhosts()
     canvas.classList.remove('dragging')
@@ -373,6 +377,9 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     // this triggers happens now, before any ghost is drawn into it.
     store.select(p.id)
     const { vault, mode } = store.state
+    const carried = findRoom(vault, p.id)!
+    dragHighlight = highlightFor(vault, mode, carried.w, (floor, x) => ({ kind: 'move', id: p.id, floor, x }))
+    paint()
     drag = {
       pointerId: p.pointerId,
       resolve: createDropResolver(vault, mode, { id: p.id, grabOffset: p.grabOffset }),
