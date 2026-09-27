@@ -265,3 +265,67 @@ describe('the problems list', () => {
     expect(root.querySelector('[data-problem-room="lost"]')?.textContent).toContain('FLOOR 4')
   })
 })
+
+describe('the sheets on a narrow screen', () => {
+  const shell = (root: HTMLElement) => root.querySelector<HTMLElement>('.shell')!
+  const click = (el: Element | null) => el!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  const addRoom = (root: HTMLElement) => root.querySelector('.mobile-bar [data-rooms-toggle]')
+  const menu = (root: HTMLElement) => root.querySelector<HTMLElement>('.menu')!
+
+  it('opens the room list from Add room, and puts it away once a room is armed', () => {
+    const { root, store } = mount()
+    click(addRoom(root))
+    expect(shell(root).classList.contains('rooms-open')).toBe(true)
+    click(root.querySelector('[data-place-type="diner"]'))
+    expect(store.state.tool).toBe('diner')
+    expect(shell(root).classList.contains('rooms-open')).toBe(false)
+  })
+
+  it('opens the menu from its button, and puts it away once an action is picked', () => {
+    const { root } = mount()
+    expect(menu(root).hidden).toBe(true)
+    click(root.querySelector('[data-menu-toggle]'))
+    expect(menu(root).hidden).toBe(false)
+    expect(shell(root).classList.contains('menu-open')).toBe(true)
+    click(menu(root).querySelector('[data-action="save"]'))
+    expect(menu(root).hidden).toBe(true)
+  })
+
+  it('keeps one sheet open at a time, and closes it from its own close button', () => {
+    const { root } = mount()
+    click(addRoom(root))
+    click(root.querySelector('[data-menu-toggle]'))
+    expect(shell(root).classList.contains('rooms-open')).toBe(false)
+    expect(shell(root).classList.contains('menu-open')).toBe(true)
+    click(menu(root).querySelector('[data-sheet-close]'))
+    expect(shell(root).classList.contains('menu-open')).toBe(false)
+  })
+
+  it('shows the rules in force in the menu, and switches them from there', () => {
+    const { root, store } = mount()
+    const pressed = (mode: string) => menu(root).querySelector(`[data-mode="${mode}"]`)?.getAttribute('aria-pressed')
+    expect(pressed('strict')).toBe('true')
+    click(root.querySelector('[data-menu-toggle]'))
+    click(menu(root).querySelector('[data-mode="free"]'))
+    expect(store.state.mode).toBe('free')
+    expect(pressed('free')).toBe('true')
+    expect(menu(root).querySelector('[data-rules-note]')?.textContent).toMatch(/anywhere they fit/)
+  })
+
+  it('counts the problems in the bar along the bottom too', () => {
+    const broken = createVault()
+    broken.rooms.push({ id: 'lost', type: 'diner', floor: 3, x: 12, w: 3 })
+    const { root } = mount(broken)
+    expect(root.querySelector('.mobile-bar [data-problems-toggle]')?.textContent).toBe('1 problem')
+    click(root.querySelector('.mobile-bar [data-problems-toggle]'))
+    expect(shell(root).classList.contains('problems-open')).toBe(true)
+    expect(root.querySelector<HTMLElement>('.problems')!.hidden).toBe(false)
+  })
+
+  it('names the rules in force beside the mark, for the screens that have no room for the buttons', () => {
+    const { root, store } = mount()
+    expect(root.querySelector('.rules-tag')?.textContent).toBe('STRICT')
+    store.setMode('free')
+    expect(root.querySelector('.rules-tag')?.textContent).toBe('FREE')
+  })
+})

@@ -96,7 +96,7 @@ test('every room name fits on one line, with its details on the next', async ({ 
   await page.goto('./')
 
   const rows = await page.evaluate(() =>
-    [...document.querySelectorAll('.palette button')].map((button) => {
+    [...document.querySelectorAll('.palette [data-place-type]')].map((button) => {
       const label = button.querySelector('.label') as HTMLElement
       const hint = button.querySelector('.hint') as HTMLElement
       // A Range counts line boxes. The label itself is a grid item, so it is

@@ -79,6 +79,7 @@ export const UI_PATHS = {
   info: 'M12 3a9 9 0 110 18 9 9 0 010-18zM12 11v5M12 8h.01',
   plus: 'M12 5v14M5 12h14',
   minus: 'M5 12h14',
+  menu: 'M4 7h16M4 12h16M4 17h16',
 } as const
 
 export type UiIcon = keyof typeof UI_PATHS
