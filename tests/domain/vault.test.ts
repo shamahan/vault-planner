@@ -11,7 +11,7 @@ describe('vault', () => {
     expect(v.rooms[0]).toEqual({
       id: VAULT_DOOR_ID, type: VAULT_DOOR_TYPE, floor: 0, x: 0, w: 9,
     })
-    expect(v.schemaVersion).toBe(1)
+    expect(v.schemaVersion).toBe(2)
   })
 
   it('takes a name and falls back to one', () => {

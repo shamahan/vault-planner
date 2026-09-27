@@ -90,4 +90,10 @@ describe('share links', () => {
     const truncated = 'v1z.' + compressed.slice('v1z.'.length, 'v1z.'.length + 10)
     await expect(decodeShare(truncated)).rejects.toThrow(/link/i)
   })
+
+  it('carries room levels', async () => {
+    const v = createVault()
+    v.rooms.push({ id: 'd', type: 'diner', floor: 0, x: 9, w: 3, level: 2 })
+    expect((await decodeShare(await encodeShare(v))).rooms).toContainEqual(v.rooms[1])
+  })
 })

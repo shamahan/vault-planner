@@ -25,7 +25,7 @@ export function levelOf(r: Room): Level {
 }
 
 export type Vault = {
-  schemaVersion: 1
+  schemaVersion: 2
   name: string
   rooms: Room[]
 }
@@ -35,7 +35,7 @@ export const VAULT_DOOR_ID = 'door'
 
 export function createVault(name = 'Vault 111'): Vault {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     name,
     rooms: [
       { id: VAULT_DOOR_ID, type: VAULT_DOOR_TYPE, floor: 0, x: 0, w: kindOf(VAULT_DOOR_TYPE).baseWidth },

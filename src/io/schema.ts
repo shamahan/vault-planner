@@ -1,8 +1,8 @@
 import { kindOf } from '../domain/catalog'
 import { CELLS_PER_FLOOR, FLOOR_COUNT } from '../domain/grid'
-import type { Room, Vault } from '../domain/vault'
+import type { Level, Room, Vault } from '../domain/vault'
 
-export const CURRENT_SCHEMA_VERSION = 1
+export const CURRENT_SCHEMA_VERSION = 2
 
 export class SchemaError extends Error {
   constructor(message: string) {
@@ -15,9 +15,13 @@ function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x)
 }
 
+function isLevel(x: unknown): x is Level {
+  return x === 1 || x === 2 || x === 3
+}
+
 function readRoom(raw: unknown, index: number): Room {
   if (!isRecord(raw)) throw new SchemaError(`Room ${index} is not an object.`)
-  const { id, type, floor, x, w } = raw
+  const { id, type, floor, x, w, level } = raw
   if (typeof id !== 'string' || id.length === 0) throw new SchemaError(`Room ${index} has no id.`)
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new SchemaError(`Room ${index} has an invalid id.`)
   if (typeof type !== 'string') throw new SchemaError(`Room ${id} has no type.`)
@@ -45,7 +49,14 @@ function readRoom(raw: unknown, index: number): Room {
   if (!((w as number) > 0 && (w as number) <= CELLS_PER_FLOOR)) {
     throw new SchemaError(`Room ${id} has a width out of range: ${w}.`)
   }
-  return { id, type, floor: floor as number, x: x as number, w: w as number }
+  // Legality against the kind's own cap stays validate()'s job, as with
+  // width: this only keeps out values no room could ever have.
+  if (level !== undefined && !isLevel(level)) {
+    throw new SchemaError(`Room ${id} has a bad level.`)
+  }
+  const room: Room = { id, type, floor: floor as number, x: x as number, w: w as number }
+  if (isLevel(level)) room.level = level
+  return room
 }
 
 export function parseVault(text: string): Vault {
@@ -57,11 +68,14 @@ export function parseVault(text: string): Vault {
   }
   if (!isRecord(raw)) throw new SchemaError('This file does not describe a vault.')
 
+  // Version 1 predates room levels, so its rooms simply have none and read
+  // as level 1. It is still read -- every old file and share link is
+  // version 1 -- and comes back as version 2, the only one this writes.
   const version = raw.schemaVersion
-  if (version !== CURRENT_SCHEMA_VERSION) {
+  if (version !== 1 && version !== CURRENT_SCHEMA_VERSION) {
     throw new SchemaError(
       `This file was written for schema version ${String(version)}; ` +
-      `this editor reads version ${CURRENT_SCHEMA_VERSION}.`,
+      'this editor reads versions 1 and 2.',
     )
   }
   if (typeof raw.name !== 'string') throw new SchemaError('The vault has no name.')
@@ -74,7 +88,7 @@ export function parseVault(text: string): Vault {
     ids.add(r.id)
   }
 
-  return { schemaVersion: 1, name: raw.name, rooms }
+  return { schemaVersion: CURRENT_SCHEMA_VERSION, name: raw.name, rooms }
 }
 
 export function serializeVault(v: Vault): string {

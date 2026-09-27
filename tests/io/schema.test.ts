@@ -20,8 +20,28 @@ describe('schema', () => {
 
   it('refuses a future schema version by name', () => {
     expect(() => parseVault(JSON.stringify({ schemaVersion: 99, name: 'x', rooms: [] })))
-      .toThrow(/version 99/i)
+      .toThrow('This file was written for schema version 99; this editor reads versions 1 and 2.')
   })
+
+  it('reads a version 1 file, whose rooms are all level 1, as version 2', () => {
+    const old = { schemaVersion: 1, name: 'x', rooms: [{ id: 'a', type: 'diner', floor: 0, x: 9, w: 6 }] }
+    const v = parseVault(JSON.stringify(old))
+    expect(v.schemaVersion).toBe(2)
+    expect(v.rooms[0]).toEqual({ id: 'a', type: 'diner', floor: 0, x: 9, w: 6 })
+  })
+
+  it('keeps a room level through a round trip', () => {
+    const v = createVault()
+    v.rooms.push({ id: 'a', type: 'diner', floor: 2, x: 7, w: 6, level: 3 })
+    expect(parseVault(serializeVault(v))).toEqual(v)
+  })
+
+  for (const level of [0, 4, 1.5, '2']) {
+    it(`refuses a room level of ${JSON.stringify(level)}`, () => {
+      const bad = { schemaVersion: 2, name: 'x', rooms: [{ id: 'a', type: 'diner', floor: 0, x: 0, w: 3, level }] }
+      expect(() => parseVault(JSON.stringify(bad))).toThrow('Room a has a bad level.')
+    })
+  }
 
   it('refuses a missing schema version', () => {
     expect(() => parseVault(JSON.stringify({ name: 'x', rooms: [] }))).toThrow(SchemaError)
@@ -50,7 +70,7 @@ describe('schema', () => {
 
   it('accepts a structurally sound but disconnected vault', () => {
     const lonely: Vault = {
-      schemaVersion: 1, name: 'x',
+      schemaVersion: 2, name: 'x',
       rooms: [{ id: 'a', type: 'diner', floor: 4, x: 12, w: 3 }],
     }
     expect(parseVault(JSON.stringify(lonely)).rooms).toHaveLength(1)
