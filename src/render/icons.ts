@@ -1,3 +1,6 @@
+import type { RoomKind } from '../domain/catalog'
+import { GROUP_COLORS } from './theme'
+
 export const GLYPH_PATHS: Record<string, string> = {
   /**
    * The vault door is also the site's mark: an eight-tooth cog -- the door
@@ -45,4 +48,46 @@ export function glyphDefs(): string {
       `stroke-linecap="round" stroke-linejoin="round"/></symbol>`,
   )
   return `<defs>${symbols.join('')}</defs>`
+}
+
+/** A room's glyph as a standalone svg, stroked in its group colour. */
+export function roomGlyph(kind: RoomKind, size: number): string {
+  return (
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">` +
+    `<path d="${GLYPH_PATHS[kind.glyph] ?? ''}" fill="none" stroke="${GROUP_COLORS[kind.group]}" ` +
+    `stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  )
+}
+
+/**
+ * The interface's own icons, on the same 24-unit grid as the room glyphs
+ * but drawn in currentColor, so each takes the colour of the text or button
+ * it sits in.
+ */
+export const UI_PATHS = {
+  undo: 'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11',
+  redo: 'M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13',
+  left: 'M19 12H5M11 6l-6 6 6 6',
+  right: 'M5 12h14M13 6l6 6-6 6',
+  up: 'M12 19V5M6 11l6-6 6 6',
+  down: 'M12 5v14M6 13l6 6 6-6',
+  close: 'M6 6l12 12M18 6L6 18',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  alert: 'M12 4l9 16H3L12 4zM12 10v4M12 17h.01',
+  chevronDown: 'M6 9l6 6 6-6',
+  chevronRight: 'M9 6l6 6-6 6',
+  info: 'M12 3a9 9 0 110 18 9 9 0 010-18zM12 11v5M12 8h.01',
+  plus: 'M12 5v14M5 12h14',
+  minus: 'M5 12h14',
+} as const
+
+export type UiIcon = keyof typeof UI_PATHS
+
+/** Decoration only: the button or text beside it carries the meaning. */
+export function uiIcon(name: UiIcon, size = 16): string {
+  return (
+    `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">` +
+    `<path d="${UI_PATHS[name]}" fill="none" stroke="currentColor" stroke-width="1.75" ` +
+    `stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  )
 }

@@ -1,7 +1,7 @@
-import { placeableKinds, type RoomGroup, type RoomKind } from '../domain/catalog'
+import { placeableKinds, type RoomGroup } from '../domain/catalog'
 import { validate } from '../domain/validate'
 import { GROUP_COLORS } from '../render/theme'
-import { GLYPH_PATHS } from '../render/icons'
+import { GLYPH_PATHS, roomGlyph } from '../render/icons'
 import { escapeText } from '../shared/escape'
 import type { Store } from './state'
 
@@ -9,14 +9,6 @@ const GROUP_ORDER: RoomGroup[] = [
   'infra', 'power', 'food', 'water', 'living', 'storage',
   'medical', 'training', 'crafting', 'misc', 'season',
 ]
-
-function glyphSvg(kind: RoomKind, size: number): string {
-  return (
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">` +
-    `<path d="${GLYPH_PATHS[kind.glyph] ?? ''}" fill="none" stroke="${GROUP_COLORS[kind.group]}" ` +
-    `stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-  )
-}
 
 export function renderToolbar(store: Store): string {
   const { mode } = store.state
@@ -59,7 +51,7 @@ export function renderPalette(store: Store): string {
           .filter(Boolean).join(' · ')
         return (
           `<button type="button" data-place-type="${escapeText(kind.id)}" aria-pressed="${armed}">` +
-          glyphSvg(kind, 18) +
+          roomGlyph(kind, 18) +
           `<span class="label">${escapeText(kind.name)}</span>` +
           `<span class="hint">${escapeText(hint)}</span>` +
           `<span class="width">${kind.baseWidth}</span>` +
