@@ -488,9 +488,11 @@ describe('hover ghost', () => {
     await nextFrame()
 
     // Assert against the scene's own geometry -- the floor row it actually
-    // drew -- rather than a hardcoded pixel figure.
+    // drew -- rather than a hardcoded pixel figure. A floor row is the rect
+    // filled with the cell pattern: the floor colour alone also fills the
+    // pattern's own tile and the ground under every room.
     const floorRect = [...canvas.querySelectorAll('rect')]
-      .find((r) => r.getAttribute('fill') === COLORS.floor)!
+      .find((r) => r.getAttribute('fill') === 'url(#cells)')!
     const floorLeft = Number(floorRect.getAttribute('x'))
     const floorRight = floorLeft + Number(floorRect.getAttribute('width'))
 
