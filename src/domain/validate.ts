@@ -134,7 +134,13 @@ function swapRefusal(v: Vault, op: Extract<Op, { kind: 'swap' }>): Verdict | nul
   const aName = kindOf(a.type).name
   const bName = kindOf(b.type).name
   if (a.id === b.id) return refuse('A room cannot swap places with itself.', [a.id])
-  if (b.w > a.w) return refuse(`The ${bName} is wider than the ${aName} and would not fit in its place.`, [b.id])
+  if (b.w > a.w) {
+    // Same type on both sides ("The Diner is wider than the Diner") reads as
+    // a copy-paste mistake, not a real distinction between the two rooms.
+    return a.type === b.type
+      ? refuse(`That ${bName} is wider than this one and would not fit in its place.`, [b.id])
+      : refuse(`The ${bName} is wider than the ${aName} and would not fit in its place.`, [b.id])
+  }
   // A swap puts A where B stood. An x that leaves part of B's old span
   // uncovered is a move plus a relocation, not a swap; the drag layer
   // never builds one, so this only guards the op against a bad caller.

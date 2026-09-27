@@ -358,6 +358,11 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
 
   const startDrag = (p: Press, event: PointerEvent): void => {
     press = null
+    if (!findRoom(store.state.vault, p.id)) {
+      // The pressed room went (a key removed it) before the pointer
+      // travelled far enough to carry it.
+      return
+    }
     if (pendingFrame !== null) {
       // A hover-ghost frame queued while a palette room was armed would
       // otherwise land after this one and hide the drag's ghost.

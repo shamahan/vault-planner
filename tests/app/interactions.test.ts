@@ -936,6 +936,58 @@ describe('dragging a room', () => {
     expect(store.state.selection).toBeNull()
   })
 
+  it('mousemove mid-drag leaves the drag ghost alone', async () => {
+    const { canvas } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 1, x: 11 })
+    await nextFrame()
+    const ghost = canvas.querySelector('[data-ghost]')!
+    expect(ghost.getAttribute('visibility')).toBe('visible')
+
+    // Without the `if (drag) return` guard in onMouseMove, this would hide
+    // the drag's own ghost and leave it never redrawn -- onMouseMove only
+    // ever draws the hover ghost for an armed palette tool, and no tool is
+    // armed mid-drag.
+    canvas.querySelector('[data-cell-target]')!.dispatchEvent(
+      new MouseEvent('mousemove', { bubbles: true, clientX: px(11), clientY: py(1) }),
+    )
+    await nextFrame()
+    expect(ghost.getAttribute('visibility')).toBe('visible')
+  })
+
+  it('pointercancel abandons a drag', () => {
+    const { canvas, store } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 1, x: 18 })
+    pointer(canvas, 'pointercancel', px(18), py(1))
+    expect(canvas.querySelector('[data-dragging]')).toBeNull()
+    expect(canvas.querySelector('[data-ghost]')!.getAttribute('visibility')).toBe('hidden')
+
+    release(canvas, { floor: 1, x: 18 })
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('a drop back where the room stands commits nothing', () => {
+    const { canvas, store } = mount(dragVault())
+    // Strict mode: on floor 0 only x 10 connects, so the plan is 'stay'.
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 0, x: 15 })
+    release(canvas, { floor: 0, x: 15 })
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('drops a press whose room a keystroke removed before the drag threshold', () => {
+    const { canvas, store } = mount(dragVault())
+    store.select('d0')
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    // Strict mode allows removing d0: e0/g1 on floor 1 keep their own route.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+    moveTo(canvas, { floor: 1, x: 18 })
+    expect(canvas.classList.contains('dragging')).toBe(false)
+  })
+
   it('re-aims the ghost when the scene scrolls under a still pointer', async () => {
     const { canvas } = mount(dragVault())
     press(canvas, 'd0', { floor: 0, x: 10 })

@@ -252,6 +252,19 @@ describe('canApply: swap', () => {
     expect(canApply(swapVault(), { kind: 'swap', id: 'o0', with: 'l1', x: 13 }, 'strict').ok).toBe(true)
   })
 
+  it('says the same-type target is wider than "this one", not the same name twice', () => {
+    const v = vaultWith(
+      { id: 'd1', type: 'diner', floor: 1, x: 10, w: 3 },
+      { id: 'd2', type: 'diner', floor: 2, x: 10, w: 6 },
+    )
+    const verdict = canApply(v, { kind: 'swap', id: 'd1', with: 'd2', x: 10 }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) {
+      expect(verdict.reason).toBe('That Diner is wider than this one and would not fit in its place.')
+      expect(verdict.blame).toEqual(['d2'])
+    }
+  })
+
   it('refuses a target wider than the room dropped on it', () => {
     const verdict = canApply(swapVault(), { kind: 'swap', id: 'l1', with: 'o0', x: 13 }, 'strict')
     expect(verdict.ok).toBe(false)
@@ -279,7 +292,12 @@ describe('canApply: swap', () => {
     for (const op of ops) {
       const verdict = canApply(v, op, 'free')
       expect(verdict.ok).toBe(false)
-      if (!verdict.ok) expect(verdict.reason).toMatch(/vault door/i)
+      // Not /vault door/i: that also matches the door-misplaced geometry
+      // message, so this would still pass even if touchedIds dropped op.with.
+      if (!verdict.ok) {
+        expect(verdict.reason).toBe('The vault door is part of the vault and cannot be changed.')
+        expect(verdict.blame).toEqual(['door'])
+      }
     }
   })
 
