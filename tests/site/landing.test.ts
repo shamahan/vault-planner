@@ -174,7 +174,7 @@ describe('the visit counter', () => {
    * nobody reads. Nothing else in the repository would notice.
    */
   it('reports to this site, not to an example in the docs', () => {
-    expect(landingCode).toContain('data-goatcounter="https://shamahan.goatcounter.com/count"')
+    expect(landingCode).toContain('data-goatcounter="https://vault-planner.goatcounter.com/count"')
   })
 
   /**
