@@ -131,8 +131,8 @@ export function createDropResolver(vault: Vault, mode: Mode, drag: DragStart): (
       // Two rooms alike in type and width trade places with nothing anyone
       // could see, but store.run would still commit it -- an unchanged
       // vault pushed onto the undo stack, redo cleared. Refused here, before
-      // the store, as interactions.ts already does for splitting a room
-      // that is not merged.
+      // the store, as canApply does for a room asked for the level it
+      // already has.
       return {
         kind: 'refuse',
         verdict: {

@@ -88,11 +88,12 @@ export class Store {
 
   /**
    * `selection` and `tool` are two modes, and the editor is only ever in
-   * one of them: the arrow keys move the selection, Delete removes it, S
-   * splits it, and a click on the grid places the armed room. Holding both
-   * at once leaves all of those keys aimed at a room the hand has already
-   * moved on from -- still outlined, still wearing its close handle, while
-   * the palette says something else is about to be placed.
+   * one of them: the arrow keys move the selection, Delete removes it,
+   * 1 to 3 set its level, and a click on the grid places the armed room.
+   * Holding both at once leaves all of those keys aimed at a room the
+   * hand has already moved on from -- still outlined, still wearing its
+   * close handle, while the palette says something else is about to be
+   * placed.
    *
    * So entering one mode leaves the other, and the pair of setters is
    * where that is decided. It used to be decided at every call site

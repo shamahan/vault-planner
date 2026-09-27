@@ -195,56 +195,51 @@ describe('canvas interactions', () => {
     expect(canvas.querySelectorAll('[data-room-id]')).toHaveLength(2)
   })
 
-  it('splits a merged room into several on "s"', () => {
+  it('sets the level of the selected room from the number keys', () => {
     const { store } = mount()
-    store.setMode('free')
-    store.run({ kind: 'place', type: 'diner', floor: 1, x: 6 })
-    store.run({ kind: 'place', type: 'diner', floor: 1, x: 9 })
-    store.run({ kind: 'place', type: 'diner', floor: 1, x: 12 })
-    const merged = store.state.vault.rooms.find((r) => r.type === 'diner')!
-    expect(merged.w).toBe(9)
-    store.select(merged.id)
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
-    const diners = store.state.vault.rooms.filter((r) => r.type === 'diner')
-    expect(diners).toHaveLength(3)
-    expect(diners.every((r) => r.w === 3)).toBe(true)
+    store.run({ kind: 'place', type: 'diner', floor: 0, x: 9 })
+    const diner = store.state.vault.rooms.find((r) => r.type === 'diner')!
+    store.select(diner.id)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '3', bubbles: true }))
+    expect(findRoom(store.state.vault, diner.id)?.level).toBe(3)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }))
+    expect(findRoom(store.state.vault, diner.id)?.level).toBe(2)
   })
 
-  it('also splits on shift+S, the key a person actually presses', () => {
-    const { store } = mount()
-    store.setMode('free')
-    store.run({ kind: 'place', type: 'diner', floor: 1, x: 6 })
-    store.run({ kind: 'place', type: 'diner', floor: 1, x: 9 })
-    const merged = store.state.vault.rooms.find((r) => r.type === 'diner')!
-    store.select(merged.id)
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'S', shiftKey: true, bubbles: true }))
-    expect(store.state.vault.rooms.filter((r) => r.type === 'diner')).toHaveLength(2)
-  })
-
-  it('refuses to split a room that is not merged, and leaves undo alone', () => {
+  it('refuses the level a room already has, and leaves undo alone', () => {
     const { canvas, store } = mount()
-    // Touching the door (which spans [0, 9)) so strict mode's default
-    // connectivity rule accepts the placement; w === baseWidth, unmerged.
     store.run({ kind: 'place', type: 'diner', floor: 0, x: 9 })
     const dinerId = store.state.vault.rooms.find((r) => r.type === 'diner')!.id
-
-    // Give it something to redo, exactly the scenario the review flagged:
-    // canApply's connectivity rule never rejected an unmerged split (applyOp
-    // is a no-op on it, so there is no new geometry problem either), so
-    // store.run used to commit anyway -- pushing an unchanged vault onto the
-    // undo stack and, per commit()'s own contract, clearing `future`.
     store.run({ kind: 'place', type: 'elevator', floor: 0, x: 12 })
     store.undo()
     expect(store.canRedo).toBe(true)
-    const roomsBefore = store.state.vault.rooms.length
 
     store.select(dinerId)
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }))
 
-    expect(store.state.vault.rooms).toHaveLength(roomsBefore)
     expect(store.canRedo).toBe(true) // the queued redo must survive
-    expect(canvas.querySelector('[data-refusal]')?.textContent ?? '')
-      .toMatch(/nothing to split/i)
+    expect(canvas.querySelector('[data-refusal]')?.textContent).toBe('The Diner is already level 1.')
+  })
+
+  it('leaves a merged room whole on "s", now that rooms are never split', () => {
+    const { store } = mount()
+    store.setMode('free')
+    store.run({ kind: 'place', type: 'diner', floor: 1, x: 6 })
+    store.run({ kind: 'place', type: 'diner', floor: 1, x: 9 })
+    const merged = store.state.vault.rooms.find((r) => r.type === 'diner')!
+    store.select(merged.id)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
+    expect(store.state.vault.rooms.filter((r) => r.type === 'diner')).toHaveLength(1)
+  })
+
+  it('does not take Ctrl+2 or Cmd+2 as a level', () => {
+    const { store } = mount()
+    store.run({ kind: 'place', type: 'diner', floor: 0, x: 9 })
+    const diner = store.state.vault.rooms.find((r) => r.type === 'diner')!
+    store.select(diner.id)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', ctrlKey: true, bubbles: true }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', metaKey: true, bubbles: true }))
+    expect(findRoom(store.state.vault, diner.id)?.level).toBeUndefined()
   })
 })
 

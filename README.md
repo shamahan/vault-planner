@@ -16,10 +16,12 @@ It runs at <https://vault.shamahan.com/planner/>.
 - **Free mode** switches those two rules off so you can sketch in any order.
   Geometry still holds. The mode is an editor setting: it is not written into
   the file and does not travel in the share link.
-- Select a room, then use the arrow keys to move it a cell at a time, Delete
-  or Backspace to remove it, and **S** to split a merged room back into its
-  single-width pieces — the only way to remove part of one, since deleting a
-  merged room removes it whole.
+- Select a room, then use the arrow keys to move it a cell at a time,
+  Delete or Backspace to remove it, and **1**, **2** or **3** to set its
+  level. A new room is built at level 1, as in the game, and a level change
+  applies to the whole room. Rooms of one type merge only when their levels
+  match: a new room beside a level-3 one stays separate until it is raised
+  to 3. Deleting a merged room removes it whole.
 - Drag a room to move it. Dropped on free cells it lands in the nearest
   spot the rules allow; dropped on another room of the same width or
   narrower, the two trade places. A drop the rules refuse changes nothing

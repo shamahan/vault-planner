@@ -1,7 +1,7 @@
 import { kindOf } from '../domain/catalog'
 import { CELLS_PER_FLOOR, FLOOR_COUNT } from '../domain/grid'
 import { canApply, cascadeFor, validate, type Mode, type Verdict } from '../domain/validate'
-import { findRoom, type Op, type Vault } from '../domain/vault'
+import { findRoom, type Level, type Op, type Vault } from '../domain/vault'
 import { renderScene } from '../render/scene'
 import { CELL_PX, COLORS, FLOOR_GAP_PX, FLOOR_PX, SCENE_GUTTER_PX, SCENE_PAD_PX } from '../render/theme'
 import { confirmCascade } from './dialogs'
@@ -578,19 +578,12 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
       const dy = event.key === 'ArrowUp' ? -1 : 1
       say(store.run({ kind: 'move', id: selection, floor: room.floor + dy, x: room.x }))
     }
-    if (event.key.toLowerCase() === 's' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    if ((event.key === '1' || event.key === '2' || event.key === '3') &&
+        !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault()
-      // canApply accepts a split of a room that is not actually merged --
-      // applyOp is a no-op on it, so nothing about it is wrong -- but
-      // wiring that straight to store.run would still commit: it pushes
-      // the (unchanged) vault onto the undo stack and clears redo, silently
-      // burning whatever redo the person had queued up for no visible
-      // effect. Refuse before it reaches the store instead.
-      if (room.w <= kindOf(room.type).baseWidth) {
-        say({ ok: false, reason: 'This room is not merged; there is nothing to split.', blame: [selection] })
-        return
-      }
-      say(store.run({ kind: 'split', id: selection }))
+      // canApply refuses a level the room does not have and the one it
+      // already has, so a keypress never commits an unchanged vault.
+      say(store.run({ kind: 'level', id: selection, level: Number(event.key) as Level }))
     }
   }
 
