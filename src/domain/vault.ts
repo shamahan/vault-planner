@@ -1,4 +1,4 @@
-import { VAULT_DOOR_TYPE, kindOf } from './catalog'
+import { ELEVATOR_TYPE, VAULT_DOOR_TYPE, kindOf } from './catalog'
 import { overlaps, touches } from './grid'
 
 export type RoomId = string
@@ -130,21 +130,25 @@ export type ReorderPlan = { ax: number; moved: RoomId[]; shift: number; span: { 
 
 /**
  * How a reorder lays a row out. In an unbroken row -- A and B on one floor,
- * every cell between them covered by some room -- A takes B's place in the
- * order and everything between, B included, shifts by A's width into the
- * span A leaves. The order of the shifted rooms among themselves never
- * changes and nothing can overlap: the row has no holes, and the span A
- * leaves is exactly as wide as A. `ax` is A's new left edge, `moved` the
- * rooms that shift, `shift` how far (signed), `span` where the shifted
- * block ends up. Null when there is nothing to reorder: a room missing,
- * one room twice, two floors, or a free cell anywhere between. Exported
- * because canApply refuses by it and the drag layer draws the shifted
- * block's ghost from it -- the rule lives here and nowhere else.
+ * every cell between them covered by some room, with no elevator between --
+ * A takes B's place in the order and everything between, B included, shifts
+ * by A's width into the span A leaves. The order of the shifted rooms among
+ * themselves never changes and nothing can overlap: the row has no holes,
+ * and the span A leaves is exactly as wide as A. `ax` is A's new left edge,
+ * `moved` the rooms that shift, `shift` how far (signed), `span` where the
+ * shifted block ends up. Null when there is nothing to reorder: a room
+ * missing, one room twice, two floors, a free cell anywhere between, an
+ * elevator strictly between, or the two lying on top of each other.
+ * Exported because canApply refuses by it and the drag layer draws the
+ * shifted block's ghost from it -- the rule lives here and nowhere else.
  */
 export function reorderPlan(v: Vault, id: RoomId, withId: RoomId): ReorderPlan | null {
   const a = findRoom(v, id)
   const b = findRoom(v, withId)
   if (!a || !b || a.id === b.id || a.floor !== b.floor) return null
+  // Two rooms lying on top of each other (a hand-edited file) have no order
+  // between them; the swap path refuses them on geometry instead.
+  if (overlaps(a, b)) return null
   const leftward = a.x > b.x
   const others = roomsOnFloor(v, a.floor).filter((r) => r.id !== a.id)
   const holeFrom = leftward ? b.x + b.w : a.x + a.w
@@ -154,7 +158,13 @@ export function reorderPlan(v: Vault, id: RoomId, withId: RoomId): ReorderPlan |
   }
   const from = leftward ? b.x : a.x + a.w
   const to = leftward ? a.x : b.x + b.w
-  const moved = others.filter((r) => r.x >= from && r.x < to).map((r) => r.id)
+  const shifted = others.filter((r) => r.x >= from && r.x < to)
+  // An elevator between the two ends the row: elevators stand in shafts, and
+  // shifting one along to make room would cut the floors it links. The drop
+  // then falls through to a swap, as it did before reordering existed. B
+  // itself may be an elevator -- [elevator][workshop] reorders either way.
+  if (shifted.some((r) => r.id !== b.id && r.type === ELEVATOR_TYPE)) return null
+  const moved = shifted.map((r) => r.id)
   return leftward
     ? { ax: b.x, moved, shift: a.w, span: { x: b.x + a.w, w: a.x - b.x } }
     : { ax: b.x + b.w - a.w, moved, shift: -a.w, span: { x: a.x, w: b.x + b.w - a.x - a.w } }

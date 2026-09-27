@@ -301,4 +301,28 @@ describe('reorder', () => {
     expect(reorderPlan(apart, 'e', 'up')).toBeNull()
     expect(reorderPlan(apart, 'e', 'e')).toBeNull()
   })
+
+  it('stops at an elevator between the two, leaving that drop to a swap', () => {
+    // A full floor in the game is [9][E][6][E][9]: every room stands shoulder
+    // to shoulder, and a reorder across an elevator would push it out of
+    // its shaft.
+    const v = vaultWith(
+      { id: 'd', type: 'diner', floor: 1, x: 0, w: 9 },
+      { id: 'e', type: 'elevator', floor: 1, x: 9, w: 1 },
+      { id: 'g', type: 'garden', floor: 1, x: 10, w: 9 },
+    )
+    expect(reorderPlan(v, 'd', 'g')).toBeNull()
+    expect(reorderPlan(v, 'g', 'd')).toBeNull()
+    // The elevator may still be the room dropped on, or the room carried.
+    expect(reorderPlan(v, 'd', 'e')).not.toBeNull()
+    expect(reorderPlan(v, 'e', 'g')).not.toBeNull()
+  })
+
+  it('has no plan for two rooms lying on top of each other', () => {
+    const v = vaultWith(
+      { id: 'o', type: 'overseers_office', floor: 1, x: 0, w: 6 },
+      { id: 'd', type: 'diner', floor: 1, x: 2, w: 3 },
+    )
+    expect(reorderPlan(v, 'o', 'd')).toBeNull()
+  })
 })

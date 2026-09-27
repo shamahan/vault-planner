@@ -253,5 +253,31 @@ describe('createDropResolver', () => {
       expect(plan.kind).toBe('refuse')
       if (plan.kind === 'refuse') expect(plan.verdict.reason).toBe('Moving it there would change nothing.')
     })
+
+    it('swaps across an elevator instead of shifting it out of its shaft', () => {
+      const v = vaultWith(
+        { id: 'd', type: 'diner', floor: 1, x: 0, w: 9 },
+        { id: 'e', type: 'elevator', floor: 1, x: 9, w: 1 },
+        { id: 'g', type: 'garden', floor: 1, x: 10, w: 9 },
+      )
+      const resolve = createDropResolver(v, 'free', { id: 'd', grabOffset: 0 })
+      expect(resolve({ floor: 1, x: 12 })).toMatchObject({
+        kind: 'run',
+        op: { kind: 'swap', id: 'd', with: 'g', x: 10 },
+      })
+    })
+
+    it('refuses as empty a swap of two alike rooms across an elevator', () => {
+      const v = vaultWith(
+        { id: 'd1', type: 'diner', floor: 1, x: 0, w: 9 },
+        { id: 'e', type: 'elevator', floor: 1, x: 9, w: 1 },
+        { id: 'd2', type: 'diner', floor: 1, x: 10, w: 9 },
+      )
+      const plan = createDropResolver(v, 'free', { id: 'd1', grabOffset: 0 })({ floor: 1, x: 12 })
+      expect(plan.kind).toBe('refuse')
+      if (plan.kind === 'refuse') {
+        expect(plan.verdict.reason).toBe('These two rooms are the same; swapping them would change nothing.')
+      }
+    })
   })
 })
