@@ -73,6 +73,39 @@ describe('scene', () => {
     expect(renderScene(sample())).toMatchSnapshot()
   })
 
+  /**
+   * One room's markup: from its own `<g data-room-id>` to the next room's.
+   * Whatever sits between the two (floor rects, labels) draws no circles
+   * and no data-level, so counting those in the slice counts the room's.
+   */
+  function roomMarkup(svg: string, id: string): string {
+    return svg.split('<g data-room-id=').find((chunk) => chunk.startsWith(`"${id}"`)) ?? ''
+  }
+
+  it('dots a room with its level, one dot per level the kind has', () => {
+    const v = sample()
+    v.rooms.push({ id: 'b2', type: 'barbershop', floor: 2, x: 10, w: 6, level: 2 })
+    const svg = renderScene(v)
+    expect(roomMarkup(svg, 'g1')).toContain('data-level="1"')
+    expect(roomMarkup(svg, 'g1').match(/<circle/g)).toHaveLength(3)
+    expect(roomMarkup(svg, 'b2')).toContain('data-level="2"')
+    expect(roomMarkup(svg, 'b2').match(/<circle/g)).toHaveLength(2)
+  })
+
+  it('draws no level dots on the elevator or the door', () => {
+    const svg = renderScene(sample())
+    for (const id of ['e0', 'door']) {
+      expect(roomMarkup(svg, id)).toContain('<title>')
+      expect(roomMarkup(svg, id)).not.toContain('data-level')
+    }
+  })
+
+  it('names the level in the title of a room that has one', () => {
+    const v = sample()
+    v.rooms.find((r) => r.id === 'l0')!.level = 3
+    expect(renderScene(v)).toMatch(/data-room-id="l0"[^>]*><title>Living Room, level 3<\/title>/)
+  })
+
   it('draws no candidate marks when none are given', () => {
     expect(renderScene(sample())).not.toContain('data-candidate="true"')
   })

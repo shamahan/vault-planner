@@ -1,7 +1,7 @@
 import { kindOf } from '../domain/catalog'
 import { CELLS_PER_FLOOR, FLOOR_COUNT, floorLabel } from '../domain/grid'
 import type { Problem } from '../domain/validate'
-import type { Room, RoomId, Vault } from '../domain/vault'
+import { levelOf, type Room, type RoomId, type Vault } from '../domain/vault'
 import { escapeText } from '../shared/escape'
 import { glyphDefs } from './icons'
 import {
@@ -77,14 +77,28 @@ function roomGroup(room: Room, opts: SceneOptions, top: number): string {
     blamed ? 'opacity="0.6"' : '',
   ].filter(Boolean).join(' ')
 
+  const level = levelOf(room)
+  const title = kind.maxLevel > 1 ? `${kind.name}, level ${level}` : kind.name
   const body: string[] = [
-    `<title>${escapeText(kind.name)}</title>`,
+    `<title>${escapeText(title)}</title>`,
     `<rect width="${w}" height="${h}" rx="3" fill="${tint(stroke, 0.13)}" ` +
     `stroke="${stroke}" stroke-width="1"${blamed ? ' stroke-dasharray="3 3"' : ''}/>`,
   ]
   if (selected) {
     body.push(`<rect width="${w}" height="${h}" rx="3" fill="none" ` +
       `stroke="${COLORS.selection}" stroke-width="2"/>`)
+  }
+  // The level, as dots in the top-left corner: one per level the kind has,
+  // filled up to the room's own. Top-left because the top-right corner is
+  // the selected room's delete handle. The elevator has no levels and the
+  // door is never changed, so neither carries any.
+  if (kind.maxLevel > 1) {
+    const dots: string[] = []
+    for (let i = 0; i < kind.maxLevel; i++) {
+      const fill = i < level ? stroke : tint(stroke, 0.28)
+      dots.push(`<circle cx="${6 + i * 6}" cy="6" r="2" fill="${fill}"/>`)
+    }
+    body.push(`<g data-level="${level}">${dots.join('')}</g>`)
   }
   // Deleting a room was reachable only by pressing Delete, which is logical
   // and invisible -- there was nothing on screen to say it was possible. So
