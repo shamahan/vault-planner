@@ -20,6 +20,10 @@ It runs at <https://vault.shamahan.com/planner/>.
   or Backspace to remove it, and **S** to split a merged room back into its
   single-width pieces — the only way to remove part of one, since deleting a
   merged room removes it whole.
+- Drag a room to move it. Dropped on free cells it lands in the nearest
+  spot the rules allow; dropped on another room of the same width or
+  narrower, the two trade places. A drop the rules refuse changes nothing
+  and says why.
 
 ## Developing
 

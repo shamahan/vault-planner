@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import { CELLS_PER_FLOOR } from '../src/domain/grid'
+import { CELL_PX, FLOOR_GAP_PX, FLOOR_PX, SCENE_GUTTER_PX, SCENE_PAD_PX } from '../src/render/theme'
 
 /**
  * Every navigation here is `./`, meaning baseURL itself, which is the
@@ -157,5 +159,61 @@ test('arming a room leaves the palette scrolled where it was', async ({ page }) 
   // back to the top.
   expect(await page.evaluate(() => document.querySelector('.palette')!.scrollTop))
     .toBe(visible.scrollTop)
+})
+
+test('drag a room onto another to swap them, then onto free cells to move it', async ({ page }) => {
+  await page.goto('./')
+
+  const scene = page.locator('.scene > svg')
+  // The centre of a cell on the page, from the scene's own geometry, scaled
+  // by however wide the svg is actually drawn.
+  const cell = async (floor: number, x: number): Promise<{ x: number; y: number }> => {
+    const box = await scene.boundingBox()
+    if (!box) throw new Error('the scene was not drawn')
+    const scale = box.width / (SCENE_GUTTER_PX + CELLS_PER_FLOOR * CELL_PX + SCENE_PAD_PX)
+    return {
+      x: box.x + (SCENE_GUTTER_PX + (x + 0.5) * CELL_PX) * scale,
+      y: box.y + (SCENE_PAD_PX + floor * (FLOOR_PX + FLOOR_GAP_PX) + FLOOR_PX / 2) * scale,
+    }
+  }
+  const place = async (type: string, floor: number, x: number): Promise<void> => {
+    // The palette button toggles: clicking an armed one puts it down.
+    const button = page.locator(`[data-place-type="${type}"]`)
+    if ((await button.getAttribute('aria-pressed')) !== 'true') await button.click()
+    const at = await cell(floor, x)
+    await page.mouse.click(at.x, at.y)
+  }
+  const room = (name: string) =>
+    page.locator('[data-room-id]', { has: page.locator('title', { hasText: new RegExp(`^${name}$`) }) })
+  const dragFromTo = async (from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> => {
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(to.x, to.y, { steps: 8 })
+    await page.mouse.up()
+  }
+
+  // Floor 1: door, elevator at 9, diner [10,13), living room [13,16).
+  // Floor 2: an elevator under the first, and nothing else.
+  await place('elevator', 0, 9)
+  await place('elevator', 1, 9)
+  await place('diner', 0, 10)
+  await place('living_room', 0, 13)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-room-id]')).toHaveCount(5)
+
+  // The diner onto the living room: the same width, so they trade places.
+  await dragFromTo(await cell(0, 11), await cell(0, 14))
+  const diner = await room('Diner').boundingBox()
+  const living = await room('Living Room').boundingBox()
+  expect(diner!.x).toBeGreaterThan(living!.x)
+
+  // The diner, now at the end of the row, onto the empty floor below.
+  // Strict rules slide it to the one spot there that connects: against
+  // the elevator, at cell 10.
+  await dragFromTo(await cell(0, 14), await cell(1, 18))
+  const moved = await room('Diner').boundingBox()
+  expect(moved!.y).toBeGreaterThan(living!.y)
+  expect(moved!.x).toBeGreaterThan((await cell(1, 9)).x)
+  expect(moved!.x).toBeLessThan((await cell(1, 10)).x)
 })
 
