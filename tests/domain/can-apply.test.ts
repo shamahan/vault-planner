@@ -137,37 +137,6 @@ describe('canApply: strict mode over an already broken vault', () => {
     const v = broken()
     expect(canApply(v, { kind: 'move', id: 'lost', floor: 3, x: 15 }, 'strict').ok).toBe(true)
   })
-
-  it('lets you split an unreachable merged room without the id churn looking like new stranding', () => {
-    // 'lost' merges to width 9 (three diners' worth) while already
-    // disconnected; 'e0'/'d0' sit properly connected off the vault door.
-    // splitRoom mints fresh ids for two of 'lost's three pieces -- naively
-    // comparing stranded-id sets before and after would see those fresh ids
-    // and refuse, even though a split cannot change reachability. The real
-    // invariant isn't "the same number of stranded room records" (splitting
-    // one record into three necessarily makes three), it's that nothing
-    // that was actually connected becomes stranded by this.
-    const v = vaultWith(
-      { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
-      { id: 'd0', type: 'diner', floor: 0, x: 10, w: 3 },
-      { id: 'lost', type: 'diner', floor: 3, x: 12, w: 9 },
-    )
-    const verdict = canApply(v, { kind: 'split', id: 'lost' }, 'strict')
-    expect(verdict.ok).toBe(true)
-
-    const after = applyOp(v, { kind: 'split', id: 'lost' })
-    const lostDiners = after.rooms.filter((r) => r.floor === 3)
-    expect(lostDiners).toHaveLength(3)
-    expect(lostDiners.every((r) => r.w === 3)).toBe(true)
-
-    // Every piece of the split is still unreachable, as it should be --
-    // splitting a broken room does not repair it -- and the previously
-    // connected rooms are still not among the stranded.
-    const stranded = new Set(validate(after).filter((p) => p.kind === 'unreachable').flatMap((p) => p.rooms))
-    for (const r of lostDiners) expect(stranded.has(r.id)).toBe(true)
-    expect(stranded.has('e0')).toBe(false)
-    expect(stranded.has('d0')).toBe(false)
-  })
 })
 
 describe('canApply: the merge cap', () => {

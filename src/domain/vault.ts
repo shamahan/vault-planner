@@ -65,7 +65,6 @@ export type Op =
   | { kind: 'removeMany'; ids: RoomId[] }
   | { kind: 'move'; id: RoomId; floor: number; x: number }
   | { kind: 'swap'; id: RoomId; with: RoomId; x: number }
-  | { kind: 'split'; id: RoomId }
   | { kind: 'level'; id: RoomId; level: Level }
   | { kind: 'rename'; name: string }
 
@@ -109,26 +108,6 @@ function mergeNeighbours(rooms: Room[], seed: Room): Room[] {
   }
 
   return rooms.filter((r) => !absorbed.has(r.id)).concat(group)
-}
-
-function splitRoom(rooms: Room[], id: RoomId, nextId: () => RoomId): Room[] {
-  const room = rooms.find((r) => r.id === id)
-  if (!room) return rooms
-  const base = kindOf(room.type).baseWidth
-  const parts = room.w / base
-  if (!Number.isInteger(parts) || parts <= 1) return rooms
-
-  const pieces: Room[] = []
-  for (let i = 0; i < parts; i++) {
-    pieces.push({
-      id: i === 0 ? room.id : nextId(),
-      type: room.type,
-      floor: room.floor,
-      x: room.x + i * base,
-      w: base,
-    })
-  }
-  return rooms.filter((r) => r.id !== id).concat(pieces)
 }
 
 /**
@@ -208,19 +187,6 @@ export function applyOp(v: Vault, op: Op): Vault {
       if (!room) return next
       room.level = op.level
       next.rooms = mergeNeighbours(next.rooms, room)
-      return next
-    }
-
-    case 'split': {
-      const used = new Set(next.rooms.map((r) => r.id))
-      let n = 0
-      const nextId = () => {
-        let id = `s${n++}`
-        while (used.has(id)) id = `s${n++}`
-        used.add(id)
-        return id
-      }
-      next.rooms = splitRoom(next.rooms, op.id, nextId)
       return next
     }
   }

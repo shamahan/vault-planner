@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyOp, createVault, roomsOnFloor, type Op, type Vault } from '../../src/domain/vault'
+import { applyOp, createVault, roomsOnFloor, type Level, type Op, type Vault } from '../../src/domain/vault'
 import { canApply, validate, type Mode } from '../../src/domain/validate'
 import { unreachableRooms } from '../../src/domain/reachability'
 import { placeableKinds } from '../../src/domain/catalog'
@@ -69,7 +69,7 @@ function randomOp(v: Vault, rand: () => number): Op {
   const victim = rooms[Math.floor(rand() * rooms.length)]!
   const destroyRoll = rand()
   if (destroyRoll < 0.5) return { kind: 'remove', id: victim.id }
-  if (destroyRoll < 0.75) return { kind: 'split', id: victim.id }
+  if (destroyRoll < 0.75) return { kind: 'level', id: victim.id, level: (1 + Math.floor(rand() * 3)) as Level }
   return {
     kind: 'move',
     id: victim.id,
@@ -130,17 +130,7 @@ describe('invariants over random sequences', () => {
         const before = new Set(unreachableRooms(v))
         const op = randomOp(v, rand)
         if (!canApply(v, op, 'strict').ok) continue
-        // A split mints a fresh id for every piece past the first (see
-        // domain/vault.ts's splitRoom), so splitting a room that was already
-        // stranded produces ids this loop has never seen before -- correctly
-        // stranded, since a split cannot change reachability, but absent
-        // from `before` by construction. Skip the id-churn check for that
-        // one case rather than the whole test; a split of a room that was
-        // NOT already stranded still has to leave every id, old or new,
-        // reachable, so the assertion below still guards that half.
-        const splittingAlreadyStranded = op.kind === 'split' && before.has(op.id)
         v = applyOp(v, op)
-        if (splittingAlreadyStranded) continue
         for (const id of unreachableRooms(v)) {
           expect(before.has(id), `seed ${seed}, step ${i}: "${id}" is newly stranded`).toBe(true)
         }

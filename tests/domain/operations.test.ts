@@ -54,20 +54,6 @@ describe('operations', () => {
     expect(roomsOnFloor(after, 1).filter((r) => r.type === 'elevator')).toHaveLength(2)
   })
 
-  it('splits a merged room back into single rooms', () => {
-    const v = vaultWith({ id: 'a', type: 'diner', floor: 0, x: 9, w: 9 })
-    const after = applyOp(v, { kind: 'split', id: 'a' })
-    const diners = roomsOnFloor(after, 0).filter((r) => r.type === 'diner')
-    expect(diners).toHaveLength(3)
-    expect(diners.map((r) => r.x).sort((p, q) => p - q)).toEqual([9, 12, 15])
-    expect(diners.every((r) => r.w === 3)).toBe(true)
-  })
-
-  it('leaves a single room alone when asked to split it', () => {
-    const v = vaultWith({ id: 'a', type: 'diner', floor: 0, x: 9, w: 3 })
-    expect(applyOp(v, { kind: 'split', id: 'a' }).rooms).toHaveLength(2)
-  })
-
   it('removes one room and removes many', () => {
     const v = vaultWith(
       { id: 'a', type: 'diner', floor: 0, x: 9, w: 3 },

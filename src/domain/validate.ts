@@ -111,7 +111,7 @@ function refuse(reason: string, blame: RoomId[] = []): Verdict {
 
 function touchedIds(op: Op): RoomId[] {
   switch (op.kind) {
-    case 'remove': case 'move': case 'split': case 'level': return [op.id]
+    case 'remove': case 'move': case 'level': return [op.id]
     case 'swap': return [op.id, op.with]
     case 'removeMany': return op.ids
     default: return []
@@ -122,7 +122,7 @@ function touchedIds(op: Op): RoomId[] {
  * Blame should only ever name a room the caller can look up. `problem.rooms`
  * and `newlyStranded` are computed against the hypothetical `after` vault,
  * which can contain ids born inside this op (a fresh placement, a merge that
- * relabels a group, a split's new pieces) that do not exist in `v`. Filter
+ * relabels a group) that do not exist in `v`. Filter
  * down to ids `v` actually has; if none survive, fall back to the ids the
  * op itself names (empty for `place`, which names none).
  */
@@ -225,7 +225,7 @@ export function canApply(v: Vault, op: Op, mode: Mode): Verdict {
 
   // Geometry: always, in both modes. Keyed by the span each problem
   // describes (kind + floor/x/w of the rooms involved), not by room id:
-  // ids churn under merge and split, so an id-keyed comparison can mistake
+  // ids churn under merge, so an id-keyed comparison can mistake
   // a newly-corrupted room for a pre-existing one with the same id.
   const geometryBefore = new Set(geometryProblems(v).map((p) => spanKey(v, p)))
   for (const problem of geometryProblems(after)) {
@@ -234,20 +234,6 @@ export function canApply(v: Vault, op: Op, mode: Mode): Verdict {
   }
 
   if (mode === 'free') return { ok: true }
-
-  // A split cannot change reachability, so it is exempt from the strict-mode
-  // check below even though its fresh ids would otherwise look stranded.
-  // The pieces tile the parent's contiguous span, so every neighbour that
-  // touched the parent still touches one of the pieces, the pieces touch
-  // each other, and a room's own reachability never depended on its id --
-  // only on what touches what. (An elevator, the one type whose neighbour
-  // set is not purely geometric, has maxMerge 1 and so is never splittable.)
-  // The graph is therefore unchanged up to renaming nodes, and comparing
-  // stranded-id sets before and after would wrongly blame the new ids for
-  // a disconnection that never happened -- most visibly when splitting a
-  // room that was already unreachable, which strict mode must still allow
-  // so an already-broken vault can be repaired.
-  if (op.kind === 'split') return { ok: true }
 
   // Strict: an action may never grow the set of rooms with no route to the door.
   const strandedBefore = new Set(unreachableRooms(v))
