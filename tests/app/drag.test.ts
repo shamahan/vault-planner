@@ -179,4 +179,14 @@ describe('createDropResolver', () => {
       expect(plan.verdict.reason).toBe('These two rooms are the same; swapping them would change nothing.')
     }
   })
+
+  it('swaps two rooms alike in type and width when their levels differ', () => {
+    const v = base()
+    v.rooms.push({ id: 'd2', type: 'diner', floor: 2, x: 4, w: 3, level: 3 })
+    const resolve = createDropResolver(v, 'free', { id: 'd0', grabOffset: 0 })
+    expect(resolve({ floor: 2, x: 5 })).toMatchObject({
+      kind: 'run',
+      op: { kind: 'swap', id: 'd0', with: 'd2', x: 4 },
+    })
+  })
 })

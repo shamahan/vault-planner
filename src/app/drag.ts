@@ -1,7 +1,7 @@
 import { kindOf } from '../domain/catalog'
 import { CELLS_PER_FLOOR } from '../domain/grid'
 import { canApply, type Mode, type Verdict } from '../domain/validate'
-import { findRoom, roomsOnFloor, swapLanding, type Op, type Room, type RoomId, type Vault } from '../domain/vault'
+import { findRoom, levelOf, roomsOnFloor, swapLanding, type Op, type Room, type RoomId, type Vault } from '../domain/vault'
 
 /** The room taken hold of, and how many cells right of its left edge the pointer took it. */
 export type DragStart = { id: RoomId; grabOffset: number }
@@ -127,9 +127,9 @@ export function createDropResolver(vault: Vault, mode: Mode, drag: DragStart): (
     const swapGhost = kindOf(b.type).placeable && b.w <= a.w
       ? { floor: a.floor, x: swapLanding(a, b, x), w: b.w }
       : undefined
-    if (a.type === b.type && a.w === b.w) {
-      // Two rooms alike in type and width trade places with nothing anyone
-      // could see, but store.run would still commit it -- an unchanged
+    if (a.type === b.type && a.w === b.w && levelOf(a) === levelOf(b)) {
+      // Two rooms alike in type, width and level trade places with nothing
+      // anyone could see, but store.run would still commit it -- an unchanged
       // vault pushed onto the undo stack, redo cleared. Refused here, before
       // the store, as canApply does for a room asked for the level it
       // already has.
