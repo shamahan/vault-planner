@@ -953,8 +953,17 @@ describe('dragging a room', () => {
     expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
   })
 
+  // The long press is a setTimeout, and only that is faked. jsdom schedules
+  // animation frames on Node's own setInterval, which a full fake would
+  // fake too -- whether it does differs between Node versions -- and then
+  // advancing past the long press would also run the drag's first frame
+  // against a freshly repainted svg that has no stubbed layout.
+  const useLongPressClock = (): void => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  }
+
   it('picks a room up with a finger held still on it, and drops it where the finger lets go', () => {
-    vi.useFakeTimers()
+    useLongPressClock()
     try {
       const { canvas, store } = mount(dragVault())
       press(canvas, 'd0', { floor: 0, x: 10 }, 'touch')
@@ -971,7 +980,7 @@ describe('dragging a room', () => {
   })
 
   it('lets a finger that moves before the long press scroll, and picks nothing up', () => {
-    vi.useFakeTimers()
+    useLongPressClock()
     try {
       const { canvas } = mount(dragVault())
       press(canvas, 'd0', { floor: 0, x: 10 }, 'touch')
@@ -988,7 +997,7 @@ describe('dragging a room', () => {
     // finger's touch events keep going to its old, detached element, and
     // none of them reached a listener on the canvas -- so the browser took
     // the carry for a scroll and cancelled it.
-    vi.useFakeTimers()
+    useLongPressClock()
     try {
       const { canvas } = mount(dragVault())
       stubZeroLayout(canvas.querySelector('svg')!)
