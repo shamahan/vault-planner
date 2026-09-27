@@ -385,6 +385,9 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
 
   const onPointerDown = (event: PointerEvent): void => {
     swallowClick = false
+    // A stale press from a button that came up somewhere the canvas never
+    // heard about must not still be sitting here when a new one starts.
+    press = null
     // Touch keeps scrolling the scene: a finger on a 25-floor vault is far
     // more often reaching for the floors below than for a room.
     if (drag || event.button !== 0 || event.pointerType === 'touch') return
@@ -406,6 +409,11 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
       return
     }
     if (!press || event.pointerId !== press.pointerId) return
+    if ((event.buttons & 1) === 0) {
+      // The button came up somewhere the canvas never heard about.
+      press = null
+      return
+    }
     const travelled = Math.hypot(event.clientX - press.clientX, event.clientY - press.clientY)
     if (travelled >= DRAG_THRESHOLD_PX) startDrag(press, event)
   }

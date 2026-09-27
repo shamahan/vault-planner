@@ -753,7 +753,12 @@ describe('dragging a room', () => {
   const py = (floor: number): number => SCENE_PAD_PX + floor * (FLOOR_PX + FLOOR_GAP_PX) + 1
 
   function pointer(target: Element, type: string, clientX: number, clientY: number, pointerType = 'mouse'): void {
-    target.dispatchEvent(new FakePointerEvent(type, { bubbles: true, clientX, clientY, button: 0, pointerType }))
+    // A real press or move still has the primary button down; only the
+    // pointerup that lets go of it does not -- `buttons` is what
+    // onPointerMove checks to catch a button that came up unseen.
+    target.dispatchEvent(
+      new FakePointerEvent(type, { bubbles: true, clientX, clientY, button: 0, buttons: type === 'pointerup' ? 0 : 1, pointerType }),
+    )
   }
 
   // A press reads the svg's layout, and so does every frame after it -- but
@@ -794,6 +799,36 @@ describe('dragging a room', () => {
     clickRoom(canvas, 'd0')
     expect(store.state.selection).toBe('d0')
     expect(store.canUndo).toBe(false)
+  })
+
+  it('never starts a drag from a press whose button let go unseen', () => {
+    const { canvas, store } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    // The pointer travels past the threshold, but its button is already up
+    // -- exactly what a flick out past the canvas edge and a release out
+    // there, with nothing in between crossing the threshold, looks like.
+    canvas.dispatchEvent(
+      new FakePointerEvent('pointermove', {
+        bubbles: true,
+        clientX: px(18),
+        clientY: py(1),
+        button: 0,
+        buttons: 0,
+      }),
+    )
+    expect(canvas.querySelector('[data-dragging]')).toBeNull()
+    expect(store.state.selection).toBeNull()
+  })
+
+  it('never lets a stale press from an unseen release pick up a later room', () => {
+    const { canvas, store } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    // No pointerup at all -- the release happened outside the canvas, so
+    // the canvas never heard it and `press` was left pointing at d0.
+    press(canvas, 'door', { floor: 0, x: 3 })
+    moveTo(canvas, { floor: 1, x: 18 })
+    expect(canvas.querySelector('[data-dragging]')).toBeNull()
+    expect(findRoom(store.state.vault, 'd0')).toMatchObject({ floor: 0, x: 10 })
   })
 
   it('moves a room dropped on free cells, as one undo step', () => {
