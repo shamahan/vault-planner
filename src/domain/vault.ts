@@ -65,6 +65,7 @@ export type Op =
   | { kind: 'removeMany'; ids: RoomId[] }
   | { kind: 'move'; id: RoomId; floor: number; x: number }
   | { kind: 'swap'; id: RoomId; with: RoomId; x: number }
+  | { kind: 'reorder'; id: RoomId; with: RoomId }
   | { kind: 'level'; id: RoomId; level: Level }
   | { kind: 'rename'; name: string }
 
@@ -125,6 +126,40 @@ export function swapLanding(a: Room, b: Room, x: number): number {
   return overlaps({ x: a.x, w: b.w }, { x, w: a.w }) ? a.x + a.w - b.w : a.x
 }
 
+export type ReorderPlan = { ax: number; moved: RoomId[]; shift: number; span: { x: number; w: number } }
+
+/**
+ * How a reorder lays a row out. In an unbroken row -- A and B on one floor,
+ * every cell between them covered by some room -- A takes B's place in the
+ * order and everything between, B included, shifts by A's width into the
+ * span A leaves. The order of the shifted rooms among themselves never
+ * changes and nothing can overlap: the row has no holes, and the span A
+ * leaves is exactly as wide as A. `ax` is A's new left edge, `moved` the
+ * rooms that shift, `shift` how far (signed), `span` where the shifted
+ * block ends up. Null when there is nothing to reorder: a room missing,
+ * one room twice, two floors, or a free cell anywhere between. Exported
+ * because canApply refuses by it and the drag layer draws the shifted
+ * block's ghost from it -- the rule lives here and nowhere else.
+ */
+export function reorderPlan(v: Vault, id: RoomId, withId: RoomId): ReorderPlan | null {
+  const a = findRoom(v, id)
+  const b = findRoom(v, withId)
+  if (!a || !b || a.id === b.id || a.floor !== b.floor) return null
+  const leftward = a.x > b.x
+  const others = roomsOnFloor(v, a.floor).filter((r) => r.id !== a.id)
+  const holeFrom = leftward ? b.x + b.w : a.x + a.w
+  const holeTo = leftward ? a.x : b.x
+  for (let cell = holeFrom; cell < holeTo; cell++) {
+    if (!others.some((r) => r.x <= cell && cell < r.x + r.w)) return null
+  }
+  const from = leftward ? b.x : a.x + a.w
+  const to = leftward ? a.x : b.x + b.w
+  const moved = others.filter((r) => r.x >= from && r.x < to).map((r) => r.id)
+  return leftward
+    ? { ax: b.x, moved, shift: a.w, span: { x: b.x + a.w, w: a.x - b.x } }
+    : { ax: b.x + b.w - a.w, moved, shift: -a.w, span: { x: a.x, w: b.x + b.w - a.x - a.w } }
+}
+
 export function applyOp(v: Vault, op: Op): Vault {
   const next = clone(v)
 
@@ -179,6 +214,24 @@ export function applyOp(v: Vault, op: Op): Vault {
       // then there is no B left to merge.
       const survivor = next.rooms.find((r) => r.id === op.with)
       if (survivor) next.rooms = mergeNeighbours(next.rooms, survivor)
+      return next
+    }
+
+    case 'reorder': {
+      const plan = reorderPlan(next, op.id, op.with)
+      const a = next.rooms.find((r) => r.id === op.id)
+      if (!plan || !a) return next
+      const moved = new Set(plan.moved)
+      for (const r of next.rooms) if (moved.has(r.id)) r.x += plan.shift
+      a.x = plan.ax
+      next.rooms = mergeNeighbours(next.rooms, a)
+      // Each shifted room may have new neighbours too -- the one at the far
+      // end of the block now stands where A's old neighbour was -- and each
+      // that an earlier merge has not already absorbed gets its own turn.
+      for (const movedId of plan.moved) {
+        const survivor = next.rooms.find((r) => r.id === movedId)
+        if (survivor) next.rooms = mergeNeighbours(next.rooms, survivor)
+      }
       return next
     }
 

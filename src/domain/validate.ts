@@ -1,6 +1,6 @@
 import { kindOf, VAULT_DOOR_TYPE } from './catalog'
 import { floorLabel, isFloor, overlaps, withinFloor } from './grid'
-import { applyOp, findRoom, levelOf, roomsOnFloor, VAULT_DOOR_ID, type Op, type Room, type RoomId, type Vault } from './vault'
+import { applyOp, findRoom, levelOf, reorderPlan, roomsOnFloor, VAULT_DOOR_ID, type Op, type Room, type RoomId, type Vault } from './vault'
 import { dependentsOf, unreachableRooms } from './reachability'
 
 export type ProblemKind =
@@ -112,7 +112,7 @@ function refuse(reason: string, blame: RoomId[] = []): Verdict {
 function touchedIds(op: Op): RoomId[] {
   switch (op.kind) {
     case 'remove': case 'move': case 'level': return [op.id]
-    case 'swap': return [op.id, op.with]
+    case 'swap': case 'reorder': return [op.id, op.with]
     case 'removeMany': return op.ids
     default: return []
   }
@@ -154,6 +154,29 @@ function swapRefusal(v: Vault, op: Extract<Op, { kind: 'swap' }>): Verdict | nul
   if (op.x > b.x || op.x + a.w < b.x + b.w) {
     return refuse(`The ${aName} has to cover the ${bName} to swap places with it.`, [a.id, b.id])
   }
+  return null
+}
+
+/**
+ * What makes a reorder wrong before any geometry is worked out. Both rooms
+ * are known to exist: canApply has already looked each of them up.
+ */
+function reorderRefusal(v: Vault, op: Extract<Op, { kind: 'reorder' }>): Verdict | null {
+  const a = findRoom(v, op.id) as Room
+  const b = findRoom(v, op.with) as Room
+  if (a.id === b.id) return refuse('A room cannot swap places with itself.', [a.id])
+  const plan = reorderPlan(v, op.id, op.with)
+  // The drag layer builds a reorder only for two rooms in one unbroken row;
+  // this guards the op against a caller that does not check.
+  if (!plan) {
+    return refuse(`The ${kindOf(a.type).name} and the ${kindOf(b.type).name} are not in one unbroken row.`, [a.id, b.id])
+  }
+  // touchedIds has already refused the door as A or B. In a vault laid out
+  // by the rules it can be nothing else -- it stands at the far left of
+  // floor 0 -- but a hand-edited file can put it mid-row, among the rooms
+  // that would shift.
+  const door = plan.moved.find((id) => !kindOf((findRoom(v, id) as Room).type).placeable)
+  if (door) return refuse('The vault door is part of the vault and cannot be changed.', [door])
   return null
 }
 
@@ -214,6 +237,10 @@ export function canApply(v: Vault, op: Op, mode: Mode): Verdict {
 
   if (op.kind === 'swap') {
     const refusal = swapRefusal(v, op)
+    if (refusal) return refusal
+  }
+  if (op.kind === 'reorder') {
+    const refusal = reorderRefusal(v, op)
     if (refusal) return refusal
   }
   if (op.kind === 'level') {

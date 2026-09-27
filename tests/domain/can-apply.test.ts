@@ -356,3 +356,69 @@ describe('canApply: room levels', () => {
     expect(canApply(v, { kind: 'level', id: 'lost', level: 2 }, 'strict').ok).toBe(true)
   })
 })
+
+describe('canApply: reorder', () => {
+  const row = (): Vault => vaultWith(
+    { id: 'e1', type: 'elevator', floor: 1, x: 4, w: 1 },
+    { id: 'r2', type: 'weapon_workshop', floor: 1, x: 5, w: 9 },
+    { id: 'r3', type: 'outfit_workshop', floor: 1, x: 14, w: 9 },
+    { id: 'e4', type: 'elevator', floor: 1, x: 23, w: 1 },
+  )
+
+  it('accepts inserting a room between two others in its row', () => {
+    expect(canApply(row(), { kind: 'reorder', id: 'e4', with: 'r3' }, 'free').ok).toBe(true)
+  })
+
+  it('refuses a room reordered onto itself', () => {
+    const verdict = canApply(row(), { kind: 'reorder', id: 'e4', with: 'e4' }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toBe('A room cannot swap places with itself.')
+  })
+
+  it('refuses two rooms that free cells keep apart', () => {
+    const v = vaultWith(
+      { id: 'e', type: 'elevator', floor: 1, x: 4, w: 1 },
+      { id: 'w', type: 'weapon_workshop', floor: 1, x: 17, w: 9 },
+    )
+    const verdict = canApply(v, { kind: 'reorder', id: 'e', with: 'w' }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) {
+      expect(verdict.reason).toBe('The Elevator and the Weapon Workshop are not in one unbroken row.')
+      expect(verdict.blame).toEqual(['e', 'w'])
+    }
+  })
+
+  it('refuses to shift the vault door, even in a vault where it has strayed', () => {
+    // The door belongs at the far left of floor 0, where nothing can stand
+    // left of it; a hand-edited file can put it mid-row anywhere.
+    const v = vaultWith(
+      { id: 'l', type: 'lounge', floor: 1, x: 0, w: 3 },
+      { id: 'd', type: 'diner', floor: 1, x: 12, w: 3 },
+    )
+    const door = v.rooms.find((r) => r.id === 'door')!
+    door.floor = 1
+    door.x = 3
+    const verdict = canApply(v, { kind: 'reorder', id: 'd', with: 'l' }, 'free')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) {
+      expect(verdict.reason).toBe('The vault door is part of the vault and cannot be changed.')
+      expect(verdict.blame).toEqual(['door'])
+    }
+  })
+
+  it('refuses in strict mode a shift that takes an elevator out of its shaft', () => {
+    // The diner dropped on the elevator beside it pushes the elevator from
+    // x 9 to x 12, off the shaft down to floor 1.
+    const v = vaultWith(
+      { id: 'e0', type: 'elevator', floor: 0, x: 9, w: 1 },
+      { id: 'd0', type: 'diner', floor: 0, x: 10, w: 3 },
+      { id: 'e1', type: 'elevator', floor: 1, x: 9, w: 1 },
+      { id: 'g1', type: 'garden', floor: 1, x: 10, w: 3 },
+    )
+    const op = { kind: 'reorder', id: 'd0', with: 'e0' } as const
+    const verdict = canApply(v, op, 'strict')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toBe('That would leave 2 rooms with no route to the vault door.')
+    expect(canApply(v, op, 'free').ok).toBe(true)
+  })
+})

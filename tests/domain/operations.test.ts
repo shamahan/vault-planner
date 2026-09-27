@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyOp, createVault, findRoom, levelOf, roomsOnFloor, type Vault } from '../../src/domain/vault'
+import { applyOp, createVault, findRoom, levelOf, reorderPlan, roomsOnFloor, type Vault } from '../../src/domain/vault'
 
 function vaultWith(...rooms: Vault['rooms']): Vault {
   const v = createVault()
@@ -219,5 +219,86 @@ describe('operations: room levels', () => {
     )
     const after = applyOp(v, { kind: 'move', id: 'b', floor: 0, x: 12 })
     expect(roomsOnFloor(after, 0).filter((r) => r.type === 'diner')).toHaveLength(2)
+  })
+})
+
+describe('reorder', () => {
+  // Floor 1: elevator e1 at 4, workshop r2 [5,14), workshop r3 [14,23), elevator e4 at 23.
+  const row = (): Vault => vaultWith(
+    { id: 'e1', type: 'elevator', floor: 1, x: 4, w: 1 },
+    { id: 'r2', type: 'weapon_workshop', floor: 1, x: 5, w: 9 },
+    { id: 'r3', type: 'outfit_workshop', floor: 1, x: 14, w: 9 },
+    { id: 'e4', type: 'elevator', floor: 1, x: 23, w: 1 },
+  )
+
+  it('inserts a room before the one it lands on, shifting that one along', () => {
+    const after = applyOp(row(), { kind: 'reorder', id: 'e4', with: 'r3' })
+    expect(findRoom(after, 'e4')).toMatchObject({ floor: 1, x: 14 })
+    expect(findRoom(after, 'r3')).toMatchObject({ floor: 1, x: 15 })
+    expect(findRoom(after, 'r2')).toMatchObject({ floor: 1, x: 5 })
+    expect(findRoom(after, 'e1')).toMatchObject({ floor: 1, x: 4 })
+  })
+
+  it('shifts every room between when it lands further along the row', () => {
+    const after = applyOp(row(), { kind: 'reorder', id: 'e4', with: 'r2' })
+    expect(findRoom(after, 'e4')).toMatchObject({ x: 5 })
+    expect(findRoom(after, 'r2')).toMatchObject({ x: 6 })
+    expect(findRoom(after, 'r3')).toMatchObject({ x: 15 })
+  })
+
+  it('moves right as well as left, ending where the room it lands on ended', () => {
+    const after = applyOp(row(), { kind: 'reorder', id: 'e1', with: 'r3' })
+    expect(findRoom(after, 'e1')).toMatchObject({ x: 22 })
+    expect(findRoom(after, 'r2')).toMatchObject({ x: 4 })
+    expect(findRoom(after, 'r3')).toMatchObject({ x: 13 })
+    expect(findRoom(after, 'e4')).toMatchObject({ x: 23 })
+  })
+
+  it('lets an elevator past a wider room at the edge of the floor, and back', () => {
+    // [elevator][workshop] against the right-hand edge: either one dropped
+    // on the other gives the same [workshop][elevator].
+    const edge = (): Vault => vaultWith(
+      { id: 'e', type: 'elevator', floor: 1, x: 16, w: 1 },
+      { id: 'w', type: 'weapon_workshop', floor: 1, x: 17, w: 9 },
+    )
+    for (const op of [
+      { kind: 'reorder', id: 'e', with: 'w' },
+      { kind: 'reorder', id: 'w', with: 'e' },
+    ] as const) {
+      const after = applyOp(edge(), op)
+      expect(findRoom(after, 'w')).toMatchObject({ x: 16 })
+      expect(findRoom(after, 'e')).toMatchObject({ x: 25 })
+    }
+  })
+
+  it('merges rooms the shift brings together', () => {
+    const v = vaultWith(
+      { id: 'd1', type: 'diner', floor: 1, x: 0, w: 3 },
+      { id: 'l', type: 'lounge', floor: 1, x: 3, w: 3 },
+      { id: 'd2', type: 'diner', floor: 1, x: 6, w: 3 },
+    )
+    const after = applyOp(v, { kind: 'reorder', id: 'l', with: 'd2' })
+    expect(findRoom(after, 'l')).toMatchObject({ x: 6 })
+    expect(findRoom(after, 'd2')).toMatchObject({ x: 0, w: 6 })
+    expect(findRoom(after, 'd1')).toBeUndefined()
+  })
+
+  it('leaves the vault it was given untouched', () => {
+    const v = row()
+    applyOp(v, { kind: 'reorder', id: 'e4', with: 'r3' })
+    expect(findRoom(v, 'e4')).toMatchObject({ x: 23 })
+    expect(findRoom(v, 'r3')).toMatchObject({ x: 14 })
+  })
+
+  it('plans the layout, and has no plan across free cells, across floors or for one room', () => {
+    expect(reorderPlan(row(), 'e4', 'r2')).toEqual({ ax: 5, moved: ['r2', 'r3'], shift: 1, span: { x: 6, w: 18 } })
+    const apart = vaultWith(
+      { id: 'e', type: 'elevator', floor: 1, x: 4, w: 1 },
+      { id: 'w', type: 'weapon_workshop', floor: 1, x: 17, w: 9 },
+      { id: 'up', type: 'diner', floor: 2, x: 0, w: 3 },
+    )
+    expect(reorderPlan(apart, 'e', 'w')).toBeNull()
+    expect(reorderPlan(apart, 'e', 'up')).toBeNull()
+    expect(reorderPlan(apart, 'e', 'e')).toBeNull()
   })
 })
