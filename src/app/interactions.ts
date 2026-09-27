@@ -498,6 +498,12 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     press = null
     if (event.pointerType === 'touch') {
       fingers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      // A finger's touch events keep going to the element it came down on,
+      // even after a repaint has taken that element out of the page --
+      // which picking a room up does -- and a detached element's events
+      // never reach the canvas. So onTouchMove goes on that element too,
+      // or the browser takes the carry for a scroll and cancels it.
+      event.target?.addEventListener('touchmove', onTouchMove as EventListener, { passive: false })
       if (fingers.size === 2) {
         // A second finger makes it a pinch: whatever the first was about
         // to pick up, it is not picking up now.

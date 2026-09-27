@@ -983,6 +983,27 @@ describe('dragging a room', () => {
     }
   })
 
+  it('keeps the scene still under a carried room, though the element the finger came down on is repainted away', () => {
+    // Found in a real browser: picking the room up repaints the scene, the
+    // finger's touch events keep going to its old, detached element, and
+    // none of them reached a listener on the canvas -- so the browser took
+    // the carry for a scroll and cancelled it.
+    vi.useFakeTimers()
+    try {
+      const { canvas } = mount(dragVault())
+      stubZeroLayout(canvas.querySelector('svg')!)
+      const under = canvas.querySelector('[data-room-id="d0"] rect')!
+      pointer(under, 'pointerdown', px(10), py(0), 'touch')
+      vi.advanceTimersByTime(500)
+      expect(under.isConnected).toBe(false)
+      const move = new Event('touchmove', { cancelable: true })
+      under.dispatchEvent(move)
+      expect(move.defaultPrevented).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("keeps the browser's own menu out of a long press", () => {
     const { canvas } = mount(dragVault())
     press(canvas, 'd0', { floor: 0, x: 10 }, 'touch')
