@@ -68,11 +68,66 @@ body { margin: 0; overflow: hidden; background: #0e1412; color: #dce5e0;
    floor 1 into unreachable negative scroll. justify-items keeps the
    horizontal centring place-items used to provide. */
 .scene-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain;
-  display: grid; align-content: start; justify-items: center; }
-.refusal { position: absolute; left: 16px; right: 16px; bottom: 16px; margin: 0;
-  padding: 10px 14px; background: #182220; border: 1px solid #2b3831; border-radius: 7px;
-  font-size: 13px; color: #6c7b75; pointer-events: none; }
-.refusal:empty { display: none; }
+  display: grid; align-content: start; justify-items: center;
+  /* The sides are what applyZoom subtracts before fitting (16 + 16); the
+     bottom lets the last floors scroll clear of the dock. */
+  padding: 0 16px 128px; }
+/* The dock under the grid: the refusal line over the bar for a selected,
+   armed or carried room (src/app/dock.ts). Absolutely placed against
+   .canvas, like .refusal was on its own, so it stays at the visible bottom
+   at any scroll position -- see the note on .canvas above. Its own box lets
+   clicks through to the grid; only what it shows catches them. The sides
+   leave room for the zoom column. */
+.dock { position: absolute; left: 72px; right: 72px; bottom: 16px; display: flex;
+  flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.refusal { max-width: 100%; margin: 0; padding: 9px 14px; background: #182220;
+  border: 1px solid #2b3831; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  font-size: 13px; color: #c3d0ca; pointer-events: auto; }
+.refusal:empty, .dock-bar:empty { display: none; }
+.bar { pointer-events: auto; display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: center; gap: 6px; padding: 8px; background: #151c19;
+  border: 1px solid #2b3831; border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.45);
+  font-size: 13px; color: #dce5e0; }
+.bar .tile { width: 40px; height: 40px; flex: none; display: inline-flex; align-items: center;
+  justify-content: center; border-radius: 9px; }
+.bar .what { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 0 4px; }
+.bar .what strong { font-size: 14px; font-weight: 600; }
+.bar .what span { font-size: 12.5px; color: #9faea7; }
+.bar .sep, .toolbar .sep { width: 1px; height: 28px; margin: 0 4px; background: #26332d; }
+.bar button { height: 36px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px;
+  background: #182220; border: 1px solid #253029; border-radius: 8px; color: #dce5e0;
+  font: inherit; font-size: 13px; cursor: pointer; }
+.bar button.icon-only { width: 36px; padding: 0; justify-content: center; }
+.bar button.danger { color: #ec8a6c; background: rgba(215,96,58,.08); border-color: rgba(215,96,58,.45); }
+.bar .label, .bar .hint { font-size: 12.5px; color: #86968f; }
+.bar .hint { display: inline-flex; align-items: center; gap: 6px; }
+/* Two or three buttons that are one choice: the rules in the toolbar, a
+   room's level in the dock. The pressed one is the one in force. */
+.seg { display: inline-flex; gap: 2px; padding: 2px; background: #0e1412;
+  border: 1px solid #26332d; border-radius: 9px; }
+.bar .seg button, .toolbar .seg button { height: 28px; min-width: 32px; padding: 0 10px;
+  background: transparent; border: 0; border-radius: 7px; color: #b9c6c0; font-size: 12.5px; }
+.bar .seg button[aria-pressed="true"], .toolbar .seg button[aria-pressed="true"] {
+  background: #e3a63c; color: #0e1412; font-weight: 700; }
+kbd { font-family: ui-monospace, monospace; font-size: 10.5px; padding: 1px 5px;
+  border: 1px solid #2e3d36; border-radius: 4px; color: #9faea7; }
+.bar button.danger kbd { color: inherit; border-color: rgba(215,96,58,.4); }
+.legend { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: #c3d0ca; }
+.swatch { width: 22px; height: 14px; flex: none; box-sizing: border-box; border-radius: 2px; }
+.swatch.lit { background: rgba(227,166,60,.1); border-bottom: 3px solid #e3a63c; }
+.swatch.dim { background: rgba(227,166,60,.05); border: 1px solid #2b3831; }
+/* One column at the bottom right: the dock is centred, so a column keeps
+   clear of it on any canvas wider than the bar. */
+.zoom { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column;
+  background: rgba(21,28,25,.94); border: 1px solid #2b3831; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4); overflow: hidden; }
+.zoom button { width: 40px; height: 34px; display: inline-flex; align-items: center;
+  justify-content: center; padding: 0; background: transparent; border: 0; color: #c3d0ca;
+  font: inherit; font-size: 12px; cursor: pointer; }
+.zoom button[data-zoom-fit][aria-pressed="true"] { color: #e3a63c; }
+.zoom-level { padding: 2px 0; text-align: center; font-family: ui-monospace, monospace;
+  font-size: 10.5px; color: #9faea7; }
+.bar button:focus-visible, .zoom button:focus-visible { outline: 2px solid #e3a63c; outline-offset: 2px; }
 /* Dragging a room (src/app/interactions.ts). Room labels are drawn text,
    and a press-and-drag across them would otherwise select it. The open
    hand marks what can be picked up -- never the vault door, which the

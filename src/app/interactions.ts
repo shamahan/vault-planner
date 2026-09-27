@@ -2,12 +2,15 @@ import { kindOf } from '../domain/catalog'
 import { CELLS_PER_FLOOR, FLOOR_COUNT } from '../domain/grid'
 import { canApply, cascadeFor, validate, type Mode, type Verdict } from '../domain/validate'
 import { findRoom, type Level, type Op, type Vault } from '../domain/vault'
+import { uiIcon } from '../render/icons'
 import { renderScene } from '../render/scene'
 import { CELL_PX, COLORS, FLOOR_GAP_PX, FLOOR_PX, SCENE_GUTTER_PX, SCENE_PAD_PX } from '../render/theme'
 import { confirmCascade } from './dialogs'
+import { renderDock } from './dock'
 import { createDropResolver, type DropPlan, type Ghost } from './drag'
 import { highlightFor, type Highlight, type Spot } from './highlight'
 import type { Store } from './state'
+import { fitScale, stepZoom } from './zoom'
 
 export function describeRefusal(verdict: Verdict): string {
   return verdict.ok ? '' : verdict.reason
@@ -130,13 +133,20 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   // every paint used to destroy and recreate it each time, which reset its
   // scrollTop/scrollLeft to zero -- invisible with two floors, but with 25
   // it threw you back to the top of the vault on every placement, deletion,
-  // undo and selection. Keeping .scene-scroll (and .refusal, which must
-  // stay a sibling of it -- see the comment below) in place and updating
-  // only .scene's own markup on each repaint means there is no scroll
-  // position to lose in the first place.
+  // undo and selection. Keeping .scene-scroll (and the dock with .refusal
+  // in it, which must stay outside it -- see the comment below) in place
+  // and updating only .scene's own markup on each repaint means there is no
+  // scroll position to lose in the first place.
   canvas.innerHTML =
     '<div class="scene-scroll"><div class="scene" data-cell-target></div></div>' +
-    '<p class="refusal" data-refusal></p>'
+    '<div class="dock" data-dock><p class="refusal" data-refusal></p><div class="dock-bar" data-dock-bar></div></div>' +
+    '<div class="zoom" data-zoom>' +
+    `<button type="button" data-zoom-step="1" aria-label="Zoom in" title="Zoom in">${uiIcon('plus')}</button>` +
+    '<span class="zoom-level" data-zoom-level aria-live="polite">100%</span>' +
+    `<button type="button" data-zoom-step="-1" aria-label="Zoom out" title="Zoom out">${uiIcon('minus')}</button>` +
+    '<button type="button" data-zoom-fit aria-pressed="true" title="Fit the vault to the window">Fit</button>' +
+    '</div>'
+  const dockBarEl = canvas.querySelector<HTMLElement>('[data-dock-bar]')!
   const sceneEl = canvas.querySelector<HTMLElement>('[data-cell-target]')!
   const refusalEl = canvas.querySelector<HTMLElement>('[data-refusal]')!
   const scrollEl = canvas.querySelector<HTMLElement>('.scene-scroll')!
@@ -169,19 +179,50 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   // once when the drag starts, since the vault cannot change mid-drag.
   let dragHighlight: Highlight | null = null
 
+  // The room being carried, from the moment a drag starts until it ends --
+  // set before the repaint that shows the drag, so the dock can say so.
+  let carrying: string | null = null
+
+  // 'fit' follows the window; a number is a zoom someone chose, and it
+  // stays until they choose another or go back to Fit.
+  let zoom: 'fit' | number = 'fit'
+  let scale = 1
+  const zoomLevelEl = canvas.querySelector<HTMLElement>('[data-zoom-level]')!
+  const zoomFitEl = canvas.querySelector<HTMLElement>('[data-zoom-fit]')!
+
+  // The svg keeps its natural size in its width attribute; drawing it wider
+  // or narrower is all a zoom is. cellFromPoint already scales a click by
+  // the drawn width against the viewBox, so nothing downstream has to know.
+  // Applied after every repaint, which replaces the svg.
+  const applyZoom = (): void => {
+    const svg = sceneEl.querySelector('svg')
+    if (!svg) return
+    const natural = Number(svg.getAttribute('width'))
+    // Less the scroll pane's own side padding, so a fitted grid never
+    // needs a horizontal scrollbar.
+    scale = zoom === 'fit' ? fitScale(scrollEl.clientWidth - 32, natural) : zoom
+    svg.style.width = `${Math.round(natural * scale)}px`
+    svg.style.height = 'auto'
+    zoomLevelEl.textContent = `${Math.round(scale * 100)}%`
+    zoomFitEl.setAttribute('aria-pressed', String(zoom === 'fit'))
+  }
+
   const paint = () => {
     const { vault, selection, tool, mode } = store.state
     const highlight = dragHighlight ?? (tool ? placementFor(vault, tool, mode).highlight : null)
     // Only .scene's own markup is replaced -- .scene-scroll (its parent,
-    // the thing that actually scrolls) and .refusal (its sibling; see the
-    // mountCanvas comment on why .refusal must stay outside .scene-scroll)
-    // are never touched, so neither loses state across a repaint.
+    // the thing that actually scrolls) and .refusal (in the dock beside it;
+    // see the mountCanvas comment on why .refusal must stay outside
+    // .scene-scroll) are never touched, so neither loses state across a
+    // repaint. The dock's bar is plain markup with nothing to keep.
     sceneEl.innerHTML = renderScene(vault, {
       problems: validate(vault),
       selection,
       candidates: highlight?.connected,
       freeOnly: highlight?.freeOnly,
     })
+    applyZoom()
+    dockBarEl.innerHTML = renderDock({ vault, mode, selection, tool, carrying })
     // Any refusal shown for a previous action no longer applies once the
     // scene it was about has just been repainted; say() below sets a fresh
     // one when this repaint itself follows a refusal.
@@ -352,6 +393,7 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     // The drop, if any, repaints again through the store; a refused or
     // abandoned one would otherwise leave the drag's highlight standing.
     dragHighlight = null
+    carrying = null
     paint()
     markDragged(null)
     hideDragGhosts()
@@ -379,6 +421,7 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     const { vault, mode } = store.state
     const carried = findRoom(vault, p.id)!
     dragHighlight = highlightFor(vault, mode, carried.w, (floor, x) => ({ kind: 'move', id: p.id, floor, x }))
+    carrying = p.id
     paint()
     drag = {
       pointerId: p.pointerId,
@@ -469,6 +512,46 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     void offerCascade(store, id, verdict)
   }
 
+  const nudge = (dx: number, dy: number): void => {
+    const { selection, vault } = store.state
+    const room = selection ? findRoom(vault, selection) : undefined
+    if (!room) return
+    say(store.run({ kind: 'move', id: room.id, floor: room.floor + dy, x: room.x + dx }))
+  }
+
+  const NUDGE: Record<string, [number, number]> = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }
+
+  // The dock's and the zoom's buttons. The dock's Delete is not here: it
+  // is a [data-delete-room] like the handle on the room, and onClick sends
+  // both to removeRoom before it gets this far.
+  const onControl = (button: HTMLElement): void => {
+    if (button.hasAttribute('data-zoom-fit')) {
+      zoom = 'fit'
+      applyZoom()
+      return
+    }
+    if (button.dataset.zoomStep) {
+      zoom = stepZoom(scale, button.dataset.zoomStep === '-1' ? -1 : 1)
+      applyZoom()
+      return
+    }
+    const step = button.dataset.nudge ? NUDGE[button.dataset.nudge] : undefined
+    if (step) {
+      nudge(step[0], step[1])
+      return
+    }
+    const { selection } = store.state
+    if (button.dataset.setLevel && selection) {
+      say(store.run({ kind: 'level', id: selection, level: Number(button.dataset.setLevel) as Level }))
+      return
+    }
+    if (button.hasAttribute('data-deselect')) {
+      store.select(null)
+      return
+    }
+    if (button.hasAttribute('data-stop-placing')) store.setTool(null)
+  }
+
   const onClick = (event: MouseEvent) => {
     if (swallowClick) {
       swallowClick = false
@@ -484,6 +567,15 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     const close = target.closest<HTMLElement>('[data-delete-room]')
     if (close?.dataset.deleteRoom) {
       removeRoom(close.dataset.deleteRoom)
+      return
+    }
+
+    // The dock and the zoom sit over the grid: a click on either was aimed
+    // at them, never at the cell underneath -- not even on a bar's own
+    // background, where an armed room would otherwise be placed.
+    if (target.closest('[data-dock], [data-zoom]')) {
+      const button = target.closest<HTMLElement>('button')
+      if (button) onControl(button)
       return
     }
 
@@ -576,13 +668,11 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     }
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault()
-      const dx = event.key === 'ArrowLeft' ? -1 : 1
-      say(store.run({ kind: 'move', id: selection, floor: room.floor, x: room.x + dx }))
+      nudge(event.key === 'ArrowLeft' ? -1 : 1, 0)
     }
     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
       event.preventDefault()
-      const dy = event.key === 'ArrowUp' ? -1 : 1
-      say(store.run({ kind: 'move', id: selection, floor: room.floor + dy, x: room.x }))
+      nudge(0, event.key === 'ArrowUp' ? -1 : 1)
     }
     if ((event.key === '1' || event.key === '2' || event.key === '3') &&
         !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -603,6 +693,11 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   canvas.addEventListener('pointercancel', onPointerCancel)
   canvas.addEventListener('lostpointercapture', onPointerCancel)
   scrollEl.addEventListener('scroll', onScroll)
+  // A fitted grid follows the window; a chosen zoom stays as it was.
+  const onResize = (): void => {
+    if (zoom === 'fit') applyZoom()
+  }
+  window.addEventListener('resize', onResize)
   const unsubscribe = store.subscribe(paint)
   paint()
 
@@ -618,6 +713,7 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     canvas.removeEventListener('pointercancel', onPointerCancel)
     canvas.removeEventListener('lostpointercapture', onPointerCancel)
     scrollEl.removeEventListener('scroll', onScroll)
+    window.removeEventListener('resize', onResize)
     if (pendingFrame !== null) cancelAnimationFrame(pendingFrame)
     unsubscribe()
   }

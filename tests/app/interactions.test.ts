@@ -1058,4 +1058,102 @@ describe('dragging a room', () => {
     pointer(canvas, 'pointercancel', px(4), py(5))
     expect(canvas.querySelectorAll('g[data-candidate]')).toHaveLength(0)
   })
+  it('says in the dock what dropping the room will do while it is carried', () => {
+    const { canvas } = mount(dragVault())
+    press(canvas, 'd0', { floor: 0, x: 10 })
+    moveTo(canvas, { floor: 1, x: 16 })
+    expect(canvas.querySelector('[data-bar="carrying"]')?.textContent).toContain('Moving Diner')
+    release(canvas, { floor: 1, x: 16 })
+    expect(canvas.querySelector('[data-bar="carrying"]')).toBeNull()
+  })
+})
+
+describe('the dock', () => {
+  const bar = (canvas: HTMLElement) => canvas.querySelector('[data-dock-bar] .bar')
+  const click = (canvas: HTMLElement, selector: string) =>
+    canvas.querySelector(selector)!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  function placedDiner() {
+    const { canvas, store } = mount()
+    store.run({ kind: 'place', type: 'diner', floor: 0, x: 9 })
+    const id = store.state.vault.rooms.find((r) => r.type === 'diner')!.id
+    store.select(id)
+    return { canvas, store, id }
+  }
+
+  it('is empty until something is selected, armed or carried', () => {
+    const { canvas } = mount()
+    expect(bar(canvas)).toBeNull()
+  })
+
+  it('sets the level of the selected room from its buttons', () => {
+    const { canvas, store, id } = placedDiner()
+    click(canvas, '[data-set-level="3"]')
+    expect(findRoom(store.state.vault, id)?.level).toBe(3)
+    expect(canvas.querySelector('[data-set-level="3"]')?.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('says why when it is asked for the level the room already has', () => {
+    const { canvas } = placedDiner()
+    click(canvas, '[data-set-level="1"]')
+    expect(canvas.querySelector('[data-refusal]')?.textContent).toBe('The Diner is already level 1.')
+  })
+
+  it('moves the selected room with its arrow buttons, as the arrow keys do', () => {
+    const { canvas, store, id } = placedDiner()
+    store.setMode('free')
+    click(canvas, '[data-nudge="right"]')
+    expect(findRoom(store.state.vault, id)).toMatchObject({ floor: 0, x: 10 })
+    click(canvas, '[data-nudge="down"]')
+    expect(findRoom(store.state.vault, id)).toMatchObject({ floor: 1, x: 10 })
+  })
+
+  it('deletes the selected room from its Delete button', () => {
+    const { canvas, store, id } = placedDiner()
+    click(canvas, '[data-dock-bar] [data-delete-room]')
+    expect(findRoom(store.state.vault, id)).toBeUndefined()
+  })
+
+  it('lets go of the selection, and puts an armed room down, from its buttons', () => {
+    const { canvas, store } = placedDiner()
+    click(canvas, '[data-deselect]')
+    expect(store.state.selection).toBeNull()
+    store.setTool('diner')
+    click(canvas, '[data-stop-placing]')
+    expect(store.state.tool).toBeNull()
+  })
+
+  it('never places the armed room through a click on the bar itself', () => {
+    const { canvas, store } = mount()
+    store.setTool('diner')
+    const rooms = store.state.vault.rooms.length
+    click(canvas, '[data-dock-bar] .bar')
+    expect(store.state.vault.rooms).toHaveLength(rooms)
+    expect(store.state.tool).toBe('diner')
+  })
+})
+
+describe('zoom', () => {
+  const svg = (canvas: HTMLElement) => canvas.querySelector<SVGSVGElement>('.scene svg')!
+  const click = (canvas: HTMLElement, selector: string) =>
+    canvas.querySelector(selector)!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+  it('draws the scene at 100% when there is no layout to fit, and steps from there', () => {
+    const { canvas } = mount()
+    const natural = Number(svg(canvas).getAttribute('width'))
+    expect(svg(canvas).style.width).toBe(`${natural}px`)
+    click(canvas, '[data-zoom-step="1"]')
+    expect(svg(canvas).style.width).toBe(`${Math.round(natural * 1.25)}px`)
+    expect(canvas.querySelector('[data-zoom-level]')?.textContent).toBe('125%')
+    expect(canvas.querySelector('[data-zoom-fit]')?.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('keeps a chosen zoom across a repaint, and Fit goes back to following the window', () => {
+    const { canvas, store } = mount()
+    click(canvas, '[data-zoom-step="-1"]')
+    store.run({ kind: 'place', type: 'elevator', floor: 0, x: 9 })
+    expect(svg(canvas).style.width).toBe(`${Math.round(Number(svg(canvas).getAttribute('width')) * 0.75)}px`)
+    click(canvas, '[data-zoom-fit]')
+    expect(canvas.querySelector('[data-zoom-level]')?.textContent).toBe('100%')
+    expect(canvas.querySelector('[data-zoom-fit]')?.getAttribute('aria-pressed')).toBe('true')
+  })
 })
