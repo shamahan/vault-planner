@@ -23,11 +23,12 @@ It runs at <https://vault.shamahan.com/planner/>.
   match: a new room beside a level-3 one stays separate until it is raised
   to 3. Deleting a merged room removes it whole.
 - Drag a room to move it. Dropped on free cells it lands in the nearest
-  spot the rules allow; dropped on another room of the same width or
-  narrower, the two trade places. A drop the rules refuse changes nothing
-  and says why. While a room is being placed or carried, strips light up
-  where it would keep a route to the vault door; under Free rules, dimmer
-  ones show where it merely fits.
+  spot the rules allow. Dropped on a room in the same unbroken row, it
+  takes that room's place and the rooms between shift along; dropped on a
+  room anywhere else of the same width or narrower, the two trade places.
+  A drop the rules refuse changes nothing and says why. While a room is
+  being placed or carried, strips light up where it would keep a route to
+  the vault door; under Free rules, dimmer ones show where it merely fits.
 
 ## Developing
 

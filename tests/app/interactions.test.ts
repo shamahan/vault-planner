@@ -863,6 +863,24 @@ describe('dragging a room', () => {
     expect(store.state.selection).toBe('d0')
   })
 
+  it('lets an elevator past a wider room in its row, as one undo step', () => {
+    const v = dragVault()
+    v.rooms.push(
+      { id: 'w2', type: 'weapon_workshop', floor: 2, x: 0, w: 9 },
+      { id: 'x2', type: 'elevator', floor: 2, x: 9, w: 1 },
+    )
+    const { canvas, store } = mount(v)
+    // Floor 2 has no route to the door either way; free rules keep the
+    // test about the reorder, not about connectivity.
+    store.setMode('free')
+    drag(canvas, 'x2', { floor: 2, x: 9 }, { floor: 2, x: 4 })
+    expect(findRoom(store.state.vault, 'x2')).toMatchObject({ floor: 2, x: 0 })
+    expect(findRoom(store.state.vault, 'w2')).toMatchObject({ floor: 2, x: 1 })
+    store.undo()
+    expect(findRoom(store.state.vault, 'x2')).toMatchObject({ floor: 2, x: 9 })
+    expect(store.canUndo).toBe(false)
+  })
+
   it('says why a drop is refused and leaves the vault alone', () => {
     const { canvas, store } = mount(dragVault())
     const before = store.state.vault

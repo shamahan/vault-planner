@@ -308,8 +308,9 @@ function ghostSlot(): string {
 }
 
 /**
- * The second ghost a drag needs when it would swap two rooms: where the
- * room under the pointer would go. The same as ghostSlot in every respect
+ * The second ghost a drag needs when other rooms move too: where the room
+ * under the pointer would go for a swap, or where the block that shifts
+ * along would go for a reorder. The same as ghostSlot in every respect
  * -- always emitted, hidden, every attribute valued, no pointer events, no
  * data-room-id, moved only by src/app/interactions.ts -- and emitted just
  * before it, so the dragged room's own ghost stays the SVG's last child.

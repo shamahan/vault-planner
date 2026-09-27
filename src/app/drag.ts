@@ -1,7 +1,7 @@
 import { kindOf } from '../domain/catalog'
 import { CELLS_PER_FLOOR } from '../domain/grid'
 import { canApply, type Mode, type Verdict } from '../domain/validate'
-import { findRoom, levelOf, roomsOnFloor, swapLanding, type Op, type Room, type RoomId, type Vault } from '../domain/vault'
+import { findRoom, levelOf, reorderPlan, roomsOnFloor, swapLanding, type Op, type ReorderPlan, type Room, type RoomId, type Vault } from '../domain/vault'
 
 /** The room taken hold of, and how many cells right of its left edge the pointer took it. */
 export type DragStart = { id: RoomId; grabOffset: number }
@@ -13,8 +13,9 @@ export type Ghost = { floor: number; x: number; w: number }
  * What letting go would do. `cancel`: the pointer is off the grid, and the
  * drag is abandoned. `stay`: the room would land where it already stands,
  * so there is nothing to commit. `run`: an op canApply accepts. `refuse`:
- * one it does not, with its reason. `swapGhost` is where the room under
- * the pointer would go, when there is one that can go anywhere.
+ * one it does not, with its reason. `swapGhost` is where the other rooms
+ * would go -- the room under the pointer, for a swap, or the block that
+ * shifts along, for a reorder -- when they can go anywhere.
  */
 export type DropPlan =
   | { kind: 'cancel' }
@@ -45,7 +46,7 @@ function keepOnFloor(x: number, w: number): number {
 /**
  * The run of free cells on `floor` around `cell`, counting the dragged
  * room's own cells as free -- it is about to leave them. `cell` must not be
- * inside any other room: the resolver has already made that case a swap.
+ * inside any other room: the resolver has already made that case a swap or a reorder.
  */
 function freeRunAround(vault: Vault, floor: number, cell: number, dragged: RoomId): { x: number; w: number } {
   let left = 0
@@ -70,6 +71,11 @@ function freeRunAround(vault: Vault, floor: number, cell: number, dragged: RoomI
  * inside the free run under the pointer; over another room, those at which
  * the dragged room covers it whole. With none accepted, the room is drawn
  * where the pointer holds it and the refusal says why.
+ *
+ * Over a room in the same unbroken row there is nothing to choose: the
+ * dragged room takes that room's place and the rooms between shift along,
+ * as the domain's reorderPlan lays them out, so neither the grab offset nor
+ * the cache takes part.
  *
  * Accepted edges are worked out once per floor-and-run or per target and
  * kept for the rest of the drag: the vault cannot change while one is in
@@ -147,6 +153,34 @@ export function createDropResolver(vault: Vault, mode: Mode, drag: DragStart): (
     return judge(opAt(x), ghost, swapGhost)
   }
 
+  const planReorder = (a: Room, b: Room, plan: ReorderPlan): DropPlan => {
+    const op: Op = { kind: 'reorder', id: a.id, with: b.id }
+    const ghost = { floor: a.floor, x: plan.ax, w: a.w }
+    const shifted = plan.moved.map((id) => findRoom(vault, id) as Room)
+    // Draw where the shifted block would go only if all of it can move:
+    // never a block with the vault door in it.
+    const swapGhost = shifted.every((r) => kindOf(r.type).placeable)
+      ? { floor: a.floor, x: plan.span.x, w: plan.span.w }
+      : undefined
+    // Read left to right as types, widths and levels, a row that comes out
+    // the same after the reorder -- two full groups of diners trading
+    // places -- has changed nothing anyone could see, but store.run would
+    // still commit it. Refused here, before the store, as the empty swap is.
+    const look = (rooms: Room[]): string =>
+      [...rooms].sort((p, q) => p.x - q.x).map((r) => `${r.type}:${r.w}:${levelOf(r)}`).join('|')
+    const before = look([a, ...shifted])
+    const after = look([{ ...a, x: plan.ax }, ...shifted.map((r) => ({ ...r, x: r.x + plan.shift }))])
+    if (before === after) {
+      return {
+        kind: 'refuse',
+        verdict: { ok: false, reason: 'Moving it there would change nothing.', blame: [a.id] },
+        ghost,
+        swapGhost,
+      }
+    }
+    return judge(op, ghost, swapGhost)
+  }
+
   return (cell) => {
     if (!room || !cell) return { kind: 'cancel' }
     const want = cell.x - drag.grabOffset
@@ -154,6 +188,9 @@ export function createDropResolver(vault: Vault, mode: Mode, drag: DragStart): (
     // capture every pointer event targets the canvas itself.
     const target = roomsOnFloor(vault, cell.floor)
       .find((r) => r.id !== room.id && r.x <= cell.x && cell.x < r.x + r.w)
-    return target ? planSwap(room, target, want) : planMove(room, cell, want)
+    if (!target) return planMove(room, cell, want)
+    // In one unbroken row the drop reorders; anywhere else it swaps.
+    const plan = reorderPlan(vault, room.id, target.id)
+    return plan ? planReorder(room, target, plan) : planSwap(room, target, want)
   }
 }

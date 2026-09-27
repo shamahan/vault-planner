@@ -189,4 +189,69 @@ describe('createDropResolver', () => {
       op: { kind: 'swap', id: 'd0', with: 'd2', x: 4 },
     })
   })
+
+  describe('in one unbroken row', () => {
+    // Floor 1: elevator e1 at 4, workshop r2 [5,14), workshop r3 [14,23), elevator e4 at 23.
+    const row = (): Vault => vaultWith(
+      { id: 'e1', type: 'elevator', floor: 1, x: 4, w: 1 },
+      { id: 'r2', type: 'weapon_workshop', floor: 1, x: 5, w: 9 },
+      { id: 'r3', type: 'outfit_workshop', floor: 1, x: 14, w: 9 },
+      { id: 'e4', type: 'elevator', floor: 1, x: 23, w: 1 },
+    )
+
+    it('takes the place of the room under the pointer and shifts the rest along', () => {
+      const resolve = createDropResolver(row(), 'free', { id: 'e4', grabOffset: 0 })
+      expect(resolve({ floor: 1, x: 14 })).toEqual({
+        kind: 'run',
+        op: { kind: 'reorder', id: 'e4', with: 'r3' },
+        ghost: { floor: 1, x: 14, w: 1 },
+        swapGhost: { floor: 1, x: 15, w: 9 },
+      })
+      expect(resolve({ floor: 1, x: 13 })).toEqual({
+        kind: 'run',
+        op: { kind: 'reorder', id: 'e4', with: 'r2' },
+        ghost: { floor: 1, x: 5, w: 1 },
+        swapGhost: { floor: 1, x: 6, w: 18 },
+      })
+    })
+
+    it('lets an elevator past a wider room at the edge of the floor', () => {
+      // This used to be refused: "The Weapon Workshop is wider than the Elevator".
+      const v = vaultWith(
+        { id: 'e', type: 'elevator', floor: 1, x: 16, w: 1 },
+        { id: 'w', type: 'weapon_workshop', floor: 1, x: 17, w: 9 },
+      )
+      const resolve = createDropResolver(v, 'free', { id: 'e', grabOffset: 0 })
+      expect(resolve({ floor: 1, x: 20 })).toEqual({
+        kind: 'run',
+        op: { kind: 'reorder', id: 'e', with: 'w' },
+        ghost: { floor: 1, x: 25, w: 1 },
+        swapGhost: { floor: 1, x: 16, w: 9 },
+      })
+    })
+
+    it('still swaps two rooms that free cells keep apart', () => {
+      const v = vaultWith(
+        { id: 'w', type: 'weapon_workshop', floor: 1, x: 0, w: 9 },
+        { id: 'e', type: 'elevator', floor: 1, x: 20, w: 1 },
+      )
+      const resolve = createDropResolver(v, 'free', { id: 'w', grabOffset: 0 })
+      expect(resolve({ floor: 1, x: 20 })).toMatchObject({
+        kind: 'run',
+        op: { kind: 'swap', id: 'w', with: 'e', x: 17 },
+      })
+    })
+
+    it('refuses a reorder that would change nothing anyone could see', () => {
+      // Two full groups of diners at the same level trading places.
+      const v = vaultWith(
+        { id: 'd1', type: 'diner', floor: 2, x: 0, w: 9 },
+        { id: 'd2', type: 'diner', floor: 2, x: 9, w: 9 },
+      )
+      const resolve = createDropResolver(v, 'free', { id: 'd1', grabOffset: 0 })
+      const plan = resolve({ floor: 2, x: 12 })
+      expect(plan.kind).toBe('refuse')
+      if (plan.kind === 'refuse') expect(plan.verdict.reason).toBe('Moving it there would change nothing.')
+    })
+  })
 })
