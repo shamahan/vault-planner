@@ -2,26 +2,23 @@
 export const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const
 
 /**
- * The most Fit will enlarge the grid. Past this a wide window buys bigger
- * rooms and fewer floors on screen, which is a worse trade for planning
- * than white space either side.
+ * The zoom the grid starts at, and goes back to on reset: 100%, or less
+ * when 100% would not fit the grid, `natural` px wide at 100%, across
+ * `available` px -- a phone, a narrow window -- but never under the
+ * smallest step. It never enlarges the grid by itself: filling a wide
+ * window would leave only a few floors on screen, and leave the grid
+ * looking arbitrarily sized. With nothing laid out yet (either width not
+ * above zero) there is nothing to fit, and 100% is the honest answer.
  */
-export const FIT_MAX = 1.25
-
-/**
- * The scale that lays the whole grid, `natural` px wide at 100%, across
- * `available` px -- never past FIT_MAX, never under the smallest step.
- * With nothing laid out yet (either width not above zero) there is nothing
- * to fit to, and 100% is the honest answer.
- */
-export function fitScale(available: number, natural: number): number {
+export function defaultScale(available: number, natural: number): number {
   if (!(available > 0) || !(natural > 0)) return 1
-  return Math.max(ZOOM_STEPS[0], Math.min(FIT_MAX, available / natural))
+  return Math.max(ZOOM_STEPS[0], Math.min(1, available / natural))
 }
 
 /**
  * The next step above (`dir` 1) or below (-1) `scale`, which need not be a
- * step itself -- Fit rarely lands on one -- or `scale` again at either end.
+ * step itself -- a narrowed start rarely lands on one -- or `scale` again
+ * at either end.
  */
 export function stepZoom(scale: number, dir: 1 | -1): number {
   const next = dir > 0

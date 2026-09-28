@@ -140,7 +140,7 @@ kbd { font-family: ui-monospace, monospace; font-size: 10.5px; padding: 1px 5px;
 .zoom button { width: 40px; height: 34px; display: inline-flex; align-items: center;
   justify-content: center; padding: 0; background: transparent; border: 0; color: #c3d0ca;
   font: inherit; font-size: 12px; cursor: pointer; }
-.zoom button[data-zoom-fit][aria-pressed="true"] { color: #e3a63c; }
+.zoom button:disabled { color: #56645e; cursor: default; }
 .zoom-level { padding: 2px 0; text-align: center; font-family: ui-monospace, monospace;
   font-size: 10.5px; color: #9faea7; }
 .bar button:focus-visible, .zoom button:focus-visible { outline: 2px solid #e3a63c; outline-offset: 2px; }

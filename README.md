@@ -34,8 +34,9 @@ It runs at <https://vault.shamahan.com/planner/>.
   rooms with no route to the vault door, overlaps, anything the game would
   not accept as it stands. Open it for the list, and pick a problem to go
   to its room.
-- The grid fits the window, up to 125%. The buttons at its bottom right
-  zoom in and out, and **Fit** goes back to fitting.
+- The grid starts at 100%, or smaller when 100% would not fit across the
+  window. The buttons at its bottom right zoom in and out, and the last one
+  puts the zoom back.
 - On a phone the room list, the problems and the menu open as sheets from
   the bottom, and the bar for a selected room takes the place of the one
   along the bottom. Tap to select or to place; rest a finger on a room to

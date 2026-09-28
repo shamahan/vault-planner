@@ -1205,24 +1205,35 @@ describe('zoom', () => {
   const click = (canvas: HTMLElement, selector: string) =>
     canvas.querySelector(selector)!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
-  it('draws the scene at 100% when there is no layout to fit, and steps from there', () => {
+  const resetDisabled = (canvas: HTMLElement) => canvas.querySelector('[data-zoom-reset]')!.hasAttribute('disabled')
+
+  it('draws the scene at 100%, offers no reset there, and steps from there', () => {
     const { canvas } = mount()
     const natural = Number(svg(canvas).getAttribute('width'))
     expect(svg(canvas).style.width).toBe(`${natural}px`)
+    expect(resetDisabled(canvas)).toBe(true)
     click(canvas, '[data-zoom-step="1"]')
     expect(svg(canvas).style.width).toBe(`${Math.round(natural * 1.25)}px`)
     expect(canvas.querySelector('[data-zoom-level]')?.textContent).toBe('125%')
-    expect(canvas.querySelector('[data-zoom-fit]')?.getAttribute('aria-pressed')).toBe('false')
+    expect(resetDisabled(canvas)).toBe(false)
   })
 
-  it('keeps a chosen zoom across a repaint, and Fit goes back to following the window', () => {
+  it('keeps a chosen zoom across a repaint, and the reset goes back to 100%', () => {
     const { canvas, store } = mount()
     click(canvas, '[data-zoom-step="-1"]')
     store.run({ kind: 'place', type: 'elevator', floor: 0, x: 9 })
     expect(svg(canvas).style.width).toBe(`${Math.round(Number(svg(canvas).getAttribute('width')) * 0.75)}px`)
-    click(canvas, '[data-zoom-fit]')
+    click(canvas, '[data-zoom-reset]')
     expect(canvas.querySelector('[data-zoom-level]')?.textContent).toBe('100%')
-    expect(canvas.querySelector('[data-zoom-fit]')?.getAttribute('aria-pressed')).toBe('true')
+    expect(resetDisabled(canvas)).toBe(true)
+  })
+
+  it('counts stepping back to where it started as no zoom to reset', () => {
+    const { canvas } = mount()
+    click(canvas, '[data-zoom-step="1"]')
+    click(canvas, '[data-zoom-step="-1"]')
+    expect(canvas.querySelector('[data-zoom-level]')?.textContent).toBe('100%')
+    expect(resetDisabled(canvas)).toBe(true)
   })
 })
 
@@ -1244,7 +1255,7 @@ describe('pinching', () => {
     finger('pointerdown', 2, 200)
     finger('pointermove', 2, 250)
     expect(width(canvas)).toBe(`${Math.round(natural(canvas) * 1.5)}px`)
-    expect(canvas.querySelector('[data-zoom-fit]')?.getAttribute('aria-pressed')).toBe('false')
+    expect(canvas.querySelector('[data-zoom-reset]')!.hasAttribute('disabled')).toBe(false)
     finger('pointerup', 2, 250)
     finger('pointerup', 1, 100)
   })

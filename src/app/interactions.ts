@@ -10,7 +10,7 @@ import { renderDock } from './dock'
 import { createDropResolver, type DropPlan, type Ghost } from './drag'
 import { highlightFor, type Highlight, type Spot } from './highlight'
 import type { Store } from './state'
-import { fitScale, stepZoom, ZOOM_STEPS } from './zoom'
+import { defaultScale, stepZoom, ZOOM_STEPS } from './zoom'
 
 export function describeRefusal(verdict: Verdict): string {
   return verdict.ok ? '' : verdict.reason
@@ -153,7 +153,7 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     `<button type="button" data-zoom-step="1" aria-label="Zoom in" title="Zoom in">${uiIcon('plus')}</button>` +
     '<span class="zoom-level" data-zoom-level aria-live="polite">100%</span>' +
     `<button type="button" data-zoom-step="-1" aria-label="Zoom out" title="Zoom out">${uiIcon('minus')}</button>` +
-    '<button type="button" data-zoom-fit aria-pressed="true" title="Fit the vault to the window">Fit</button>' +
+    `<button type="button" data-zoom-reset aria-label="Reset zoom" title="Reset zoom" disabled>${uiIcon('reset')}</button>` +
     '</div>'
   const dockBarEl = canvas.querySelector<HTMLElement>('[data-dock-bar]')!
   const sceneEl = canvas.querySelector<HTMLElement>('[data-cell-target]')!
@@ -192,12 +192,13 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   // set before the repaint that shows the drag, so the dock can say so.
   let carrying: string | null = null
 
-  // 'fit' follows the window; a number is a zoom someone chose, and it
-  // stays until they choose another or go back to Fit.
-  let zoom: 'fit' | number = 'fit'
+  // 'default' is where the grid starts (see defaultScale), following the
+  // window as it narrows; a number is a zoom someone chose, and it stays
+  // until they choose another or reset it.
+  let zoom: 'default' | number = 'default'
   let scale = 1
   const zoomLevelEl = canvas.querySelector<HTMLElement>('[data-zoom-level]')!
-  const zoomFitEl = canvas.querySelector<HTMLElement>('[data-zoom-fit]')!
+  const zoomResetEl = canvas.querySelector<HTMLButtonElement>('[data-zoom-reset]')!
 
   // The svg keeps its natural size in its width attribute; drawing it wider
   // or narrower is all a zoom is. cellFromPoint already scales a click by
@@ -207,16 +208,19 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
     const svg = sceneEl.querySelector('svg')
     if (!svg) return
     const natural = Number(svg.getAttribute('width'))
-    // Less the scroll pane's own side padding, so a fitted grid never
+    // Less the scroll pane's own side padding, so a narrowed grid never
     // needs a horizontal scrollbar. Read back from the styles, since the
     // padding differs between a phone and a wider screen.
     const style = getComputedStyle(scrollEl)
     const sides = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0)
-    scale = zoom === 'fit' ? fitScale(scrollEl.clientWidth - sides, natural) : zoom
+    const start = defaultScale(scrollEl.clientWidth - sides, natural)
+    // Stepping back to where it started is no zoom to reset.
+    if (zoom !== 'default' && Math.abs(zoom - start) < 1e-6) zoom = 'default'
+    scale = zoom === 'default' ? start : zoom
     svg.style.width = `${Math.round(natural * scale)}px`
     svg.style.height = 'auto'
     zoomLevelEl.textContent = `${Math.round(scale * 100)}%`
-    zoomFitEl.setAttribute('aria-pressed', String(zoom === 'fit'))
+    zoomResetEl.disabled = zoom === 'default'
   }
 
   const paint = () => {
@@ -638,8 +642,8 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   // is a [data-delete-room] like the handle on the room, and onClick sends
   // both to removeRoom before it gets this far.
   const onControl = (button: HTMLElement): void => {
-    if (button.hasAttribute('data-zoom-fit')) {
-      zoom = 'fit'
+    if (button.hasAttribute('data-zoom-reset')) {
+      zoom = 'default'
       applyZoom()
       return
     }
@@ -808,9 +812,9 @@ export function mountCanvas(canvas: HTMLElement, store: Store): () => void {
   canvas.addEventListener('contextmenu', onContextMenu)
   canvas.addEventListener('touchmove', onTouchMove, { passive: false })
   scrollEl.addEventListener('scroll', onScroll)
-  // A fitted grid follows the window; a chosen zoom stays as it was.
+  // The starting zoom follows the window; a chosen zoom stays as it was.
   const onResize = (): void => {
-    if (zoom === 'fit') applyZoom()
+    if (zoom === 'default') applyZoom()
   }
   window.addEventListener('resize', onResize)
   const unsubscribe = store.subscribe(paint)
